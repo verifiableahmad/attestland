@@ -1,0 +1,12 @@
+[Unit]
+Description=Prometheus node exporter
+After=network-online.target
+
+[Service]
+ExecStart=/opt/al/node_exporter-{{ node_exporter_version }}.linux-amd64/node_exporter \
+  --collector.textfile.directory={{ textfile_dir }} \
+  --collector.systemd --collector.ethtool
+Restart=always
+
+[Install]
+WantedBy=multi-user.target

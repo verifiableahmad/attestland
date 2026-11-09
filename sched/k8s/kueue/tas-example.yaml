@@ -1,0 +1,32 @@
+# A 2-pod job that asks Kueue to place both pods in one sub-block if it can
+# (falling back to one block, then anywhere). Use podset-required-topology to
+# wait instead of falling back. kubectl create -f sched/k8s/kueue/tas-example.yaml
+apiVersion: batch/v1
+kind: Job
+metadata:
+  generateName: tas-example-
+  namespace: batch-eval
+  labels:
+    kueue.x-k8s.io/queue-name: batch-eval
+    kueue.x-k8s.io/priority-class: batch
+spec:
+  suspend: true
+  completionMode: Indexed
+  parallelism: 2
+  completions: 2
+  template:
+    metadata:
+      annotations:
+        kueue.x-k8s.io/podset-preferred-topology: fleet.attestland/topology-subblock
+    spec:
+      restartPolicy: Never
+      priorityClassName: batch
+      tolerations:
+        - {key: fleet.attestland/pool, operator: Equal, value: k8s, effect: NoSchedule}
+      containers:
+        - name: where
+          image: nvcr.io/nvidia/cuda:12.9.1-base-ubuntu22.04
+          command: ["sh", "-c", "echo $JOB_COMPLETION_INDEX on $(hostname); nvidia-smi -L; sleep 60"]
+          resources:
+            limits:
+              nvidia.com/gpu: 1

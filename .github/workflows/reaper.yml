@@ -1,0 +1,30 @@
+# Cost control: hourly, delete project GPU instances older than 8 hours unless keep=true.
+name: reaper
+on:
+  schedule:
+    - cron: "17 * * * *"
+  workflow_dispatch:
+    inputs:
+      dry_run:
+        description: "List only"
+        default: "1"
+permissions:
+  contents: read
+  id-token: write
+jobs:
+  reap:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: google-github-actions/auth@v2
+        if: vars.GCP_PROJECT != ''
+        with:
+          workload_identity_provider: ${{ vars.GCP_WIF_PROVIDER }}
+          service_account: ${{ vars.GCP_REAPER_SA }}
+      - uses: google-github-actions/setup-gcloud@v2
+        if: vars.GCP_PROJECT != ''
+      - name: Reap
+        env:
+          GCP_PROJECT: ${{ vars.GCP_PROJECT }}
+          DRY_RUN: ${{ github.event.inputs.dry_run || '0' }}
+        run: infra/reaper/reap.sh

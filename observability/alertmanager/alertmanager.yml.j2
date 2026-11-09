@@ -1,0 +1,15 @@
+# Managed by Ansible. Incidents go to the webhook in AL_ALERT_WEBHOOK_URL
+# (a GitHub-issue bridge, Slack, or similar); empty means log-only.
+route:
+  receiver: default
+  group_by: [alertname, Hostname, instance]
+  group_wait: 10s
+  group_interval: 1m
+  repeat_interval: 4h
+receivers:
+  - name: default
+{% if alert_webhook_url %}
+    webhook_configs:
+      - url: "{{ alert_webhook_url }}"
+        send_resolved: true
+{% endif %}

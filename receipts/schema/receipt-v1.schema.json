@@ -1,0 +1,104 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://attestland.local/receipts/receipt-v1.schema.json",
+  "title": "Attestland job receipt, v1",
+  "description": "Binds CPU and GPU attestation, the signed image digest, and hashes of model, inputs and outputs under one ECDSA P-256 signature over the RFC 8785 (JCS) canonical form of every field except `signature`.",
+  "type": "object",
+  "required": ["version", "job", "platform", "software", "model", "inputs", "outputs", "signing_key", "nonce", "signature"],
+  "additionalProperties": false,
+  "$defs": {
+    "sha256hex": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+    "b64": {"type": "string", "pattern": "^[A-Za-z0-9+/=_-]*$"},
+    "time": {"type": "string", "format": "date-time"},
+    "content": {
+      "type": "object",
+      "required": ["count", "root_sha256"],
+      "additionalProperties": false,
+      "properties": {
+        "count": {"type": "integer", "minimum": 0},
+        "root_sha256": {"$ref": "#/$defs/sha256hex"},
+        "format": {"const": "jcs-jsonl"}
+      }
+    }
+  },
+  "properties": {
+    "version": {"const": "attestland/receipt/v1"},
+    "job": {
+      "type": "object",
+      "required": ["id", "kind", "scheduler", "started_at", "finished_at"],
+      "additionalProperties": false,
+      "properties": {
+        "id": {"type": "string", "minLength": 1},
+        "kind": {"enum": ["inference", "training"]},
+        "scheduler": {"enum": ["k8s", "slurm", "none"]},
+        "started_at": {"$ref": "#/$defs/time"},
+        "finished_at": {"$ref": "#/$defs/time"}
+      }
+    },
+    "platform": {
+      "type": "object",
+      "required": ["cloud", "vm_size", "cpu_tee", "gpu_tee"],
+      "additionalProperties": false,
+      "properties": {
+        "cloud": {"enum": ["gcp", "test"]},
+        "vm_size": {"type": "string"},
+        "cpu_tee": {
+          "type": "object",
+          "required": ["type", "evidence", "verifier_token"],
+          "additionalProperties": false,
+          "properties": {
+            "type": {"enum": ["sev-snp", "tdx", "test"]},
+            "evidence": {"$ref": "#/$defs/b64"},
+            "verifier_token": {"type": "string"},
+            "tool": {"type": "string"}
+          }
+        },
+        "gpu_tee": {
+          "type": "object",
+          "required": ["type", "evidence", "verifier_result", "driver_version", "vbios_version"],
+          "additionalProperties": false,
+          "properties": {
+            "type": {"enum": ["nvidia-cc", "test"]},
+            "evidence": {"$ref": "#/$defs/b64"},
+            "verifier_result": {"type": "string"},
+            "verifier": {"enum": ["nras", "local"]},
+            "driver_version": {"type": "string"},
+            "vbios_version": {"type": "string"},
+            "tool": {"type": "string"}
+          }
+        }
+      }
+    },
+    "software": {
+      "type": "object",
+      "required": ["image", "cosign_bundle"],
+      "additionalProperties": false,
+      "properties": {
+        "image": {"type": "string", "pattern": "^[^@]+@sha256:[0-9a-f]{64}$"},
+        "cosign_bundle": {"$ref": "#/$defs/b64"}
+      }
+    },
+    "model": {
+      "type": "object",
+      "required": ["name", "files_root_sha256"],
+      "additionalProperties": false,
+      "properties": {
+        "name": {"type": "string"},
+        "files_root_sha256": {"$ref": "#/$defs/sha256hex"}
+      }
+    },
+    "inputs": {"$ref": "#/$defs/content"},
+    "outputs": {"$ref": "#/$defs/content"},
+    "signing_key": {
+      "type": "object",
+      "required": ["alg", "public_key"],
+      "additionalProperties": false,
+      "properties": {
+        "alg": {"const": "ecdsa-p256"},
+        "public_key": {"$ref": "#/$defs/b64"}
+      }
+    },
+    "nonce": {"$ref": "#/$defs/sha256hex"},
+    "signature": {"$ref": "#/$defs/b64"}
+  }
+}

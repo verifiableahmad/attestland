@@ -1,0 +1,12 @@
+- name: slurmd running
+  ansible.builtin.systemd:
+    name: slurmd
+    enabled: true
+    state: "{{ 'restarted' if slurm_conf.changed | default(false) else 'started' }}"
+    daemon_reload: true
+
+- name: Enroot config
+  ansible.builtin.copy:
+    src: "{{ playbook_dir }}/../sched/slurm/enroot.conf"
+    dest: /etc/enroot/enroot.conf
+    mode: "0644"

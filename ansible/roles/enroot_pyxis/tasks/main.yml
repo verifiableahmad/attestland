@@ -1,0 +1,15 @@
+- name: Enroot packages
+  ansible.builtin.apt:
+    deb: "https://github.com/NVIDIA/enroot/releases/download/v{{ enroot_version }}/{{ item }}_{{ enroot_version }}-1_amd64.deb"
+  loop: [enroot, enroot+caps]
+
+- name: Pyxis source
+  ansible.builtin.git:
+    repo: https://github.com/NVIDIA/pyxis.git
+    dest: /usr/src/pyxis
+    version: "v{{ pyxis_version }}"
+
+- name: Build and install Pyxis
+  ansible.builtin.shell: make -C /usr/src/pyxis && make -C /usr/src/pyxis install prefix=/usr/local
+  args:
+    creates: /usr/local/lib/slurm/spank_pyxis.so

@@ -1,0 +1,39 @@
+# Everything that runs without a GPU or a cloud account.
+name: ci
+on: [push, pull_request]
+permissions: {contents: read}
+jobs:
+  go:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with: {go-version: "1.24"}
+      - run: cd fleet/healthd && go vet ./... && go test ./...
+      - run: cd receipts && go vet ./... && go test ./...
+  python:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with: {python-version: "3.12"}
+      - run: pip install -r requirements-dev.txt
+      - run: python -m pytest -q bench workloads storage chaos fleet sched network/containerlab/tests/test_gen.py
+  lab:
+    # SR Linux on a real Linux runner (the spec's default NOS).
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with: {python-version: "3.12"}
+      - run: pip install -r requirements-dev.txt
+      - run: bash -c "$(curl -sL https://get.containerlab.dev)" -- -v 0.70.2
+      - run: make lab-up PY=python && make lab-test PY=python
+  infra:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: opentofu/setup-opentofu@v1
+        with: {tofu_version: 1.10.6}
+      - run: for p in gpu-pool cc-pool; do tofu -chdir=infra/$p init -backend=false && tofu -chdir=infra/$p validate; done
+      - run: docker run --rm -v "$PWD/observability:/o" --entrypoint promtool prom/prometheus:v3.6.0 check rules /o/prometheus/rules/gpu.yml

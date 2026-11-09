@@ -1,0 +1,7 @@
+apiVersion: 1
+providers:
+  - name: attestland
+    folder: Attestland
+    type: file
+    options:
+      path: /var/lib/grafana/dashboards

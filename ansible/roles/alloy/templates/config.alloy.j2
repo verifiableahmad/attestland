@@ -1,0 +1,34 @@
+loki.write "default" {
+  endpoint { url = "http://{{ control_private_ip }}:3100/loki/api/v1/push" }
+}
+
+loki.relabel "journal" {
+  forward_to = []
+  rule {
+    source_labels = ["__journal__systemd_unit"]
+    target_label  = "unit"
+  }
+  rule {
+    source_labels = ["__journal__transport"]
+    target_label  = "transport"
+  }
+}
+
+loki.source.journal "journal" {
+  path          = "/var/log/journal"
+  relabel_rules = loki.relabel.journal.rules
+  labels        = { host = "{{ inventory_hostname }}", job = "journal" }
+  forward_to    = [loki.write.default.receiver]
+}
+
+local.file_match "jobs" {
+  path_targets = [
+    { __path__ = "/var/log/slurm/*.log", job = "slurm", host = "{{ inventory_hostname }}" },
+    { __path__ = "/scratch/logs/*.log", job = "workload", host = "{{ inventory_hostname }}" },
+  ]
+}
+
+loki.source.file "jobs" {
+  targets    = local.file_match.jobs.targets
+  forward_to = [loki.write.default.receiver]
+}

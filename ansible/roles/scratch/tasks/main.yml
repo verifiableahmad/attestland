@@ -1,0 +1,28 @@
+# Fast tier: local NVMe mounted at /scratch (GCP local SSD).
+- name: Find local NVMe SSDs
+  ansible.builtin.shell: ls /dev/disk/by-id/google-local-nvme-ssd-* 2>/dev/null || true
+  register: ssds
+  changed_when: false
+
+- name: Make filesystem
+  community.general.filesystem:
+    dev: "{{ ssds.stdout_lines | first }}"
+    fstype: ext4
+    opts: -E nodiscard -m 0
+  when: ssds.stdout_lines | length > 0
+
+- name: Mount /scratch
+  ansible.posix.mount:
+    path: "{{ scratch_mount }}"
+    src: "{{ ssds.stdout_lines | first }}"
+    fstype: ext4
+    opts: defaults,noatime,nofail,discard
+    state: mounted
+  when: ssds.stdout_lines | length > 0
+
+- name: Scratch layout
+  ansible.builtin.file:
+    path: "{{ scratch_mount }}/{{ item }}"
+    state: directory
+    mode: "1777"
+  loop: [ckpt, enroot, logs, data]

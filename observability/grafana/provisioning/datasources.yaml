@@ -1,0 +1,11 @@
+apiVersion: 1
+datasources:
+  - name: Prometheus
+    uid: prom
+    type: prometheus
+    url: http://localhost:9090
+    isDefault: true
+  - name: Loki
+    uid: loki
+    type: loki
+    url: http://localhost:3100

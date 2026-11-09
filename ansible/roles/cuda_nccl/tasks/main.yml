@@ -1,0 +1,23 @@
+- name: CUDA toolkit, NCCL and MPI
+  ansible.builtin.apt:
+    name:
+      - "cuda-toolkit-{{ cuda_version.split('.')[0] }}-{{ cuda_version.split('.')[1] }}"
+      - "libnccl2={{ nccl_version }}"
+      - "libnccl-dev={{ nccl_version }}"
+      - libopenmpi-dev
+      - openmpi-bin
+      - libpmix-dev
+    update_cache: true
+    allow_downgrade: true
+
+- name: nccl-tests source
+  ansible.builtin.git:
+    repo: https://github.com/NVIDIA/nccl-tests.git
+    dest: /opt/nccl-tests
+    version: "{{ nccl_tests_ref }}"
+
+- name: Build nccl-tests with MPI (multi-node via srun --mpi=pmix)
+  ansible.builtin.command:
+    cmd: make -j MPI=1 MPI_HOME=/usr/lib/x86_64-linux-gnu/openmpi CUDA_HOME=/usr/local/cuda
+    chdir: /opt/nccl-tests
+    creates: /opt/nccl-tests/build/all_reduce_perf

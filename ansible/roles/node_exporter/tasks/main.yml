@@ -1,0 +1,26 @@
+- name: node_exporter binary
+  ansible.builtin.unarchive:
+    src: "https://github.com/prometheus/node_exporter/releases/download/v{{ node_exporter_version }}/node_exporter-{{ node_exporter_version }}.linux-amd64.tar.gz"
+    dest: /opt/al
+    remote_src: true
+    creates: "/opt/al/node_exporter-{{ node_exporter_version }}.linux-amd64/node_exporter"
+
+- name: Textfile directory (training progress, periodic diag, burn-in)
+  ansible.builtin.file:
+    path: "{{ textfile_dir }}"
+    state: directory
+    mode: "1777"
+
+- name: node_exporter unit
+  ansible.builtin.template:
+    src: node_exporter.service.j2
+    dest: /etc/systemd/system/node_exporter.service
+    mode: "0644"
+
+- name: node_exporter running
+  ansible.builtin.systemd:
+    name: node_exporter
+    enabled: true
+    state: started
+    daemon_reload: true
+  when: not (image_build | default(false))

@@ -1,0 +1,30 @@
+# healthd on Kubernetes (spec 1.3). Image: the CI-built, signed image when
+# healthd_image is set; otherwise built here and imported into containerd.
+- name: Copy source, rules and manifests
+  ansible.builtin.copy:
+    src: "{{ playbook_dir }}/../fleet/healthd/"
+    dest: /opt/al/src/healthd/
+
+- name: Build healthd image locally (no registry configured)
+  when: healthd_image | default('') == ''
+  block:
+    - name: Build and import into containerd
+      ansible.builtin.shell: |
+        podman build -t localhost/healthd:local /opt/al/src/healthd
+        podman save localhost/healthd:local -o /tmp/healthd.tar
+        ctr -n k8s.io images import /tmp/healthd.tar
+      changed_when: true
+
+- name: Namespace, RBAC, Deployment
+  ansible.builtin.shell: |
+    sed -e "s#HEALTHD_IMAGE#{{ healthd_image | default('localhost/healthd:local', true) }}#" \
+        -e "s#CONTROL_IP#{{ control_private_ip }}#g" \
+        -e "s#DRY_RUN#{{ healthd_dry_run | default(false) | string | lower }}#" \
+        /opt/al/src/healthd/deploy/healthd.yaml > /opt/al/k8s/healthd.yaml
+    kubectl apply -f /opt/al/k8s/healthd.yaml
+    kubectl -n fleet-system create configmap healthd-rules --from-file=rules.yaml=/opt/al/src/healthd/rules.yaml \
+      --dry-run=client -o yaml | kubectl apply -f -
+    kubectl -n fleet-system create secret generic healthd-slurm-jwt --from-file=jwt_hs256.key=/etc/slurm/jwt_hs256.key \
+      --dry-run=client -o yaml | kubectl apply -f -
+    kubectl -n fleet-system rollout restart deploy/healthd
+  changed_when: true

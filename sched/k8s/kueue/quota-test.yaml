@@ -1,0 +1,30 @@
+# Done-when check (spec 3.4): submit more GPU jobs than the quota; extras stay pending.
+# kubectl create -f sched/k8s/kueue/quota-test.yaml (3 copies via generateName)
+apiVersion: batch/v1
+kind: Job
+metadata:
+  generateName: gpu-quota-test-
+  namespace: batch-eval
+  labels:
+    kueue.x-k8s.io/queue-name: batch-eval
+    kueue.x-k8s.io/priority-class: batch
+spec:
+  suspend: true
+  parallelism: 1
+  completions: 1
+  template:
+    metadata:
+      annotations:
+        kueue.x-k8s.io/podset-unconstrained-topology: "true"   # single pod: no placement constraint (ADR 007)
+    spec:
+      restartPolicy: Never
+      priorityClassName: batch
+      tolerations:
+        - {key: fleet.attestland/pool, operator: Equal, value: k8s, effect: NoSchedule}
+      containers:
+        - name: hold-gpu
+          image: nvcr.io/nvidia/cuda:12.9.1-base-ubuntu22.04
+          command: ["sh", "-c", "nvidia-smi -L; sleep 120"]
+          resources:
+            limits:
+              nvidia.com/gpu: 1

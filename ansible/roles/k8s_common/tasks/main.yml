@@ -1,0 +1,58 @@
+- name: Kernel modules for containerd networking
+  community.general.modprobe:
+    name: "{{ item }}"
+    persistent: present
+  loop: [overlay, br_netfilter]
+
+- name: Bridge netfilter and forwarding
+  ansible.posix.sysctl:
+    name: "{{ item }}"
+    value: "1"
+    sysctl_file: /etc/sysctl.d/91-k8s.conf
+  loop: [net.bridge.bridge-nf-call-iptables, net.bridge.bridge-nf-call-ip6tables, net.ipv4.ip_forward]
+
+- name: Swap off
+  ansible.builtin.command: swapoff -a
+  changed_when: false
+
+- name: Kubernetes apt repo (minor version pinned)
+  ansible.builtin.shell: |
+    v={{ kubernetes_version.split('.')[:2] | join('.') }}
+    curl -fsSL https://pkgs.k8s.io/core:/stable:/v$v/deb/Release.key | gpg --dearmor -o /etc/apt/keyrings/kubernetes-apt-keyring.gpg
+    echo "deb [signed-by=/etc/apt/keyrings/kubernetes-apt-keyring.gpg] https://pkgs.k8s.io/core:/stable:/v$v/deb/ /" > /etc/apt/sources.list.d/kubernetes.list
+  args:
+    creates: /etc/apt/sources.list.d/kubernetes.list
+
+- name: containerd, kubelet, kubeadm, kubectl
+  ansible.builtin.apt:
+    name:
+      - containerd
+      - "kubelet={{ kubernetes_version }}-1.1"
+      - "kubeadm={{ kubernetes_version }}-1.1"
+      - "kubectl={{ kubernetes_version }}-1.1"
+    update_cache: true
+
+- name: Hold Kubernetes packages
+  ansible.builtin.dpkg_selections:
+    name: "{{ item }}"
+    selection: hold
+  loop: [kubelet, kubeadm, kubectl]
+
+- name: containerd config with systemd cgroups
+  ansible.builtin.shell: |
+    mkdir -p /etc/containerd
+    containerd config default | sed 's/SystemdCgroup = false/SystemdCgroup = true/' > /etc/containerd/config.toml
+  args:
+    creates: /etc/containerd/config.toml
+  register: ctd
+
+- name: NVIDIA runtime in containerd (host toolkit; GPU Operator toolkit disabled)
+  ansible.builtin.command: nvidia-ctk runtime configure --runtime=containerd --set-as-default=false --cdi.enabled
+  when: "'gpu' in group_names"
+  changed_when: true
+
+- name: containerd running
+  ansible.builtin.systemd:
+    name: containerd
+    enabled: true
+    state: restarted

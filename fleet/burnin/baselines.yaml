@@ -1,0 +1,25 @@
+# Per-SKU baselines. Thresholds are 90% of these values (spec 1.2).
+# status: placeholder -> estimate from public specs; replace with the median of
+# the phase 2 measurements (bench/results/burnin, bench/results/net) before
+# relying on burn-in verdicts.
+skus:
+  g2-standard-8:            # 1x L4, 8 vCPU, 1x 375 GB local NVMe, 16 Gbps egress (GCP docs)
+    status: placeholder
+    gpus: 1
+    nccl_intra_busbw_gbps: 0          # single GPU: not applicable
+    nccl_inter_busbw_gbps: 1.5        # NCCL over TCP on 16 Gbps gVNIC; estimate
+    fio_seqread_mibps: 640            # GCP local SSD (1 x 375 GB) published read throughput, rounded down
+    fio_seqwrite_mibps: 350
+    fio_randread_iops: 150000
+    fio_randwrite_iops: 80000
+    network_gbps: 16
+  Standard_NCC40ads_H100_v5:  # confidential pool; burn-in runs a subset there
+    status: placeholder
+    gpus: 1
+    nccl_intra_busbw_gbps: 0
+    nccl_inter_busbw_gbps: 0
+    fio_seqread_mibps: 1000
+    fio_seqwrite_mibps: 500
+    fio_randread_iops: 100000
+    fio_randwrite_iops: 50000
+    network_gbps: 40

@@ -1,0 +1,6 @@
+project_id         = "REPLACE-gcp-project-id" # same project as the GPU pool
+project_number     = "REPLACE-123456789012"
+billing_account_id = "REPLACE-000000-000000-000000"
+zone               = "us-central1-a"          # or us-east5-a, europe-west4-c
+admin_cidrs        = ["REPLACE.your.ip.addr/32"]
+create_twin        = false # true only for the overhead benchmark (7.7)

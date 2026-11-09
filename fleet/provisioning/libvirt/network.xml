@@ -1,0 +1,7 @@
+<!-- Isolated provisioning network. No libvirt DHCP: Tinkerbell (Smee) serves DHCP and iPXE. -->
+<network>
+  <name>al-prov</name>
+  <forward mode="nat"/>
+  <bridge name="virbr-al" stp="on" delay="0"/>
+  <ip address="10.42.0.1" netmask="255.255.255.0"/>
+</network>

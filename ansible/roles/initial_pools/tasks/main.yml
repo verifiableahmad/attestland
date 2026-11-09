@@ -1,0 +1,5 @@
+# Give each GPU node to exactly one scheduler (group_vars/gpu.yml: pool).
+- name: Assign pools
+  ansible.builtin.command: /opt/al/bin/pool-move {{ item }} {{ hostvars[item].pool }} --no-wait
+  loop: "{{ groups['gpu'] }}"
+  changed_when: true

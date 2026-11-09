@@ -1,0 +1,31 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://attestland.local/bench/result.schema.json",
+  "title": "Benchmark result file",
+  "type": "object",
+  "required": ["schema_version", "phase", "name", "created_utc", "git_sha",
+               "versions", "hardware", "config", "metrics"],
+  "properties": {
+    "schema_version": {"const": 1},
+    "phase": {"enum": ["net", "train", "serve", "ckpt", "fleet", "goodput", "cc", "burnin"]},
+    "name": {"type": "string", "minLength": 1},
+    "created_utc": {"type": "string", "pattern": "^\\d{4}-\\d{2}-\\d{2}T.*Z$"},
+    "git_sha": {"type": "string"},
+    "versions": {"type": "object", "additionalProperties": {"type": "string"}},
+    "hardware": {
+      "type": "object",
+      "required": ["instance_type", "region", "cloud"],
+      "properties": {
+        "instance_type": {"type": "string"},
+        "region": {"type": "string"},
+        "cloud": {"type": "string"},
+        "gpu_model": {"type": ["string", "null"]},
+        "gpu_driver": {"type": ["string", "null"]}
+      }
+    },
+    "config": {"type": "object"},
+    "metrics": {"type": "object"},
+    "notes": {"type": "string"}
+  },
+  "additionalProperties": false
+}

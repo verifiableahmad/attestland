@@ -1,0 +1,31 @@
+# Tinkerbell stack Helm values for the provisioning lab. Smee serves DHCP on the
+# libvirt bridge; the whole stack runs with host networking on the KVM host.
+# global.publicIP is set by provision.sh (--set global.publicIP=10.42.0.1).
+global:
+  trustedProxies: []
+stack:
+  enabled: true
+  hostNetwork: true
+  kubevip:
+    enabled: false
+  relay:
+    enabled: false
+  loadBalancerIP: ""
+smee:
+  dhcp:
+    enabled: true
+    mode: reservation
+    bindInterface: virbr-al
+  iso:
+    enabled: false
+  tftp:
+    enabled: true
+tink:
+  controller:
+    enabled: true
+  server:
+    enabled: true
+hegel:
+  enabled: true
+rufio:
+  enabled: true

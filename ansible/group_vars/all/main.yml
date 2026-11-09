@@ -1,0 +1,28 @@
+# Cluster-wide settings. Secrets come from the environment (see docs/external-deps.md).
+cluster_name: attested
+slurm_user: slurm
+slurm_uid: 64030
+munge_key_b64: "{{ lookup('env', 'AL_MUNGE_KEY_B64') }}"
+slurmdbd_db_password: "{{ lookup('env', 'AL_SLURMDBD_DB_PASSWORD') | default('change-me-slurmdbd', true) }}"
+slurm_partition: gpu
+slurm_jwt_key_b64: "{{ lookup('env', 'AL_SLURM_JWT_KEY_B64') }}"
+
+k8s_pod_cidr: 192.168.0.0/16
+k8s_service_cidr: 10.96.0.0/12
+
+# Durable tier: Cloud Storage through its S3 interoperability API (ADR 008). The HMAC key and
+# bucket prefix come from the inventory (tofu output); AL_S3_* overrides them.
+s3_endpoint: "{{ lookup('env', 'AL_S3_ENDPOINT') | default(hostvars[inventory_hostname].s3_endpoint | default('https://storage.googleapis.com'), true) }}"
+s3_access_key: "{{ lookup('env', 'AL_S3_ACCESS_KEY') | default(hostvars[inventory_hostname].s3_access_key | default(''), true) }}"
+s3_secret_key: "{{ lookup('env', 'AL_S3_SECRET_KEY') | default(hostvars[inventory_hostname].s3_secret_key | default(''), true) }}"
+bucket_prefix: "{{ lookup('env', 'AL_BUCKET_PREFIX') | default(hostvars[inventory_hostname].bucket_prefix | default(''), true) }}"
+
+grafana_admin_password: "{{ lookup('env', 'AL_GRAFANA_PASSWORD') | default('change-me-grafana', true) }}"
+alert_webhook_url: "{{ lookup('env', 'AL_ALERT_WEBHOOK_URL') | default('', true) }}"
+
+scratch_mount: /scratch
+textfile_dir: /var/lib/node_exporter/textfile
+
+# Which scheduler owns each GPU node at first boot. pool-move changes it later.
+# Default: every node trains under Slurm except the last, which serves under k8s.
+default_pool: slurm

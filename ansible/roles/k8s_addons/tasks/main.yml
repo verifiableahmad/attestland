@@ -1,0 +1,57 @@
+- name: Helm
+  ansible.builtin.shell: curl -fsSL https://raw.githubusercontent.com/helm/helm/main/scripts/get-helm-3 | bash
+  args:
+    creates: /usr/local/bin/helm
+
+- name: Copy cluster manifests
+  ansible.builtin.copy:
+    src: "{{ playbook_dir }}/../sched/k8s/"
+    dest: /opt/al/k8s/
+
+- name: GPU Operator
+  ansible.builtin.shell: |
+    helm repo add nvidia https://helm.ngc.nvidia.com/nvidia --force-update
+    helm upgrade --install gpu-operator nvidia/gpu-operator --version {{ gpu_operator_version }} \
+      -n gpu-operator --create-namespace -f /opt/al/k8s/gpu-operator-values.yaml --wait --timeout 15m
+  changed_when: true
+
+- name: Kueue
+  ansible.builtin.shell: |
+    set -euo pipefail
+    kubectl apply --server-side -f https://github.com/kubernetes-sigs/kueue/releases/download/{{ kueue_version }}/manifests.yaml
+    kubectl -n kueue-system create configmap kueue-manager-config \
+      --from-file=controller_manager_config.yaml=/opt/al/k8s/kueue/manager-config.yaml \
+      --dry-run=client -o yaml | kubectl apply -f -
+    kubectl -n kueue-system rollout restart deploy/kueue-controller-manager
+    kubectl -n kueue-system rollout status deploy/kueue-controller-manager --timeout=5m
+    kubectl apply -f /opt/al/k8s/kueue/namespaces.yaml
+    # Topology before the flavor that names it; apiVersion = the CRD's storage version (ADR 007)
+    topo_api=$(kubectl get crd topologies.kueue.x-k8s.io -o jsonpath='{.spec.versions[?(@.storage==true)].name}')
+    sed "s|^apiVersion: kueue.x-k8s.io/.*|apiVersion: kueue.x-k8s.io/${topo_api}|" /opt/al/k8s/kueue/topology.yaml | kubectl apply -f -
+    kubectl apply -f /opt/al/k8s/kueue/flavors-and-queues.yaml
+  args:
+    executable: /bin/bash
+  changed_when: true
+
+- name: Object store credentials for serving
+  ansible.builtin.shell: |
+    kubectl -n serving create secret generic s3-creds \
+      --from-literal=S3_ENDPOINT={{ s3_endpoint }} \
+      --from-literal=S3_ACCESS_KEY={{ s3_access_key }} \
+      --from-literal=S3_SECRET_KEY={{ s3_secret_key }} \
+      --from-literal=S3_BUCKET_PREFIX={{ bucket_prefix }} \
+      --dry-run=client -o yaml | kubectl apply -f -
+  no_log: true
+  changed_when: true
+
+- name: vLLM
+  ansible.builtin.command: kubectl apply -f /opt/al/k8s/vllm/vllm.yaml
+  changed_when: true
+
+- name: Kueue metrics for Prometheus
+  ansible.builtin.shell: |
+    mkdir -p /etc/prometheus/secrets
+    kubectl apply -f /opt/al/k8s/kueue/metrics.yaml
+    kubectl -n kueue-system create token prometheus-scraper --duration=8760h > /etc/prometheus/secrets/kueue-token
+    chmod 0644 /etc/prometheus/secrets/kueue-token
+  changed_when: true

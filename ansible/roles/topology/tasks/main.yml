@@ -1,0 +1,42 @@
+# Physical position of each GPU node -> Slurm topology.conf (ADR 007). Runs on
+# the control VM before slurmctld starts; labels.yml applies the same data to
+# Kubernetes once the workers have joined.
+- name: Position of each GPU node (GCE metadata; absent or null fields when not exposed)
+  ansible.builtin.uri:
+    url: http://metadata.google.internal/computeMetadata/v1/instance/attributes/physical_host_topology
+    headers: {Metadata-Flavor: Google}
+    return_content: true
+    status_code: [200, 404]
+  delegate_to: "{{ item }}"
+  loop: "{{ groups['gpu'] }}"
+  register: al_positions
+
+- name: Topology tool and facts
+  ansible.builtin.copy:
+    src: "{{ playbook_dir }}/../fleet/topology/topology.py"
+    dest: /opt/al/bin/topology.py
+    mode: "0755"
+
+- name: Facts file (node -> raw metadata response)
+  ansible.builtin.copy:
+    dest: /opt/al/topology-facts.json
+    content: >-
+      {{ dict(groups['gpu'] | zip(al_positions.results
+         | map(attribute='content', default='') | list)) | to_nice_json }}
+    mode: "0644"
+
+- name: Slurm topology.conf (topology/tree)
+  ansible.builtin.shell: |
+    set -euo pipefail
+    python3 /opt/al/bin/topology.py slurm --facts /opt/al/topology-facts.json > /etc/slurm/topology.conf.new
+    if cmp -s /etc/slurm/topology.conf.new /etc/slurm/topology.conf; then rm /etc/slurm/topology.conf.new; echo same
+    else mv /etc/slurm/topology.conf.new /etc/slurm/topology.conf; chmod 0644 /etc/slurm/topology.conf; echo changed; fi
+  args:
+    executable: /bin/bash
+  register: al_topology_conf
+  changed_when: "'changed' in al_topology_conf.stdout"
+
+- name: Reload Slurm topology if slurmctld is already running
+  ansible.builtin.shell: systemctl is-active --quiet slurmctld && scontrol reconfigure || true
+  when: al_topology_conf is changed
+  changed_when: true

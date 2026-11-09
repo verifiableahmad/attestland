@@ -1,0 +1,20 @@
+# Durable tier credentials (ADR 008): an env file the training scripts source.
+# Buckets are created by tofu (infra/gpu-pool/storage.tf); nothing runs on a storage VM.
+- name: Fleet config directory
+  ansible.builtin.file:
+    path: /etc/fleet
+    state: directory
+    mode: "0755"
+
+- name: S3 environment for jobs
+  ansible.builtin.copy:
+    dest: /etc/fleet/s3.env
+    mode: "0600"
+    owner: "{{ ansible_user }}"
+    content: |
+      AL_S3_ENDPOINT={{ s3_endpoint }}
+      AL_S3_ACCESS_KEY={{ s3_access_key }}
+      AL_S3_SECRET_KEY={{ s3_secret_key }}
+      AL_S3_REGION=auto
+      AL_BUCKET_PREFIX={{ bucket_prefix }}
+  no_log: true

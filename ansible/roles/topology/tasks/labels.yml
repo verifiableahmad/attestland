@@ -1,0 +1,10 @@
+# Same positions as Kubernetes node labels, read by Kueue's Topology (levels:
+# block, sub-block, hostname). Every GPU node gets both labels; a node with no
+# position data gets "unknown", which keeps it in the single default group.
+- name: Node labels from the topology facts
+  ansible.builtin.shell: |
+    set -euo pipefail
+    python3 /opt/al/bin/topology.py kubectl --facts /opt/al/topology-facts.json | bash -e
+  args:
+    executable: /bin/bash
+  changed_when: true

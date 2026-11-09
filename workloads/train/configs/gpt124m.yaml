@@ -1,0 +1,39 @@
+# GPT-2 small on L4s (spec 4.1). Same token budget for every goodput run.
+run_name: gpt124m
+run_dir: /scratch/runs/gpt124m
+seed: 1337
+device: auto
+textfile_dir: /var/lib/node_exporter/textfile
+model:
+  block_size: 1024
+  vocab_size: 50304
+  n_layer: 12
+  n_head: 12
+  n_embd: 768
+  dropout: 0.0
+data:
+  dir: /scratch/data/fineweb-edu-2b      # synced from s3://datasets/fineweb-edu-2b
+  verify: true
+train:
+  micro_batch: 8                         # per GPU; same for 1, 2 and 4 GPUs (24 GB L4)
+  grad_accum: 4
+  # ASSUMPTION: ~150k tok/s on 4 x L4 at ~20% MFU -> 1.5 h = ~0.8B tokens. Re-size after the 1-GPU baseline.
+  token_budget: 800_000_000
+  warmup_steps_excluded: 20              # discarded before measuring (benchmark rule)
+  compile: true
+optim:
+  lr: 6.0e-4
+  min_lr: 6.0e-5
+  warmup_steps: 200
+  weight_decay: 0.1
+  grad_clip: 1.0
+dist:
+  timeout_s: 180                         # hung collectives fail in 3 min (spec 6.2)
+checkpoint:
+  local_dir: /scratch/ckpt
+  durable_uri: s3://checkpoints
+  mode: async
+  interval_s: 600                        # replaced by storage/interval.py (Young-Daly)
+  keep_local: 2
+hardware:
+  peak_bf16_flops: 121.0e12              # NVIDIA L4 datasheet: 242 TFLOPS bf16 with sparsity, 121 dense

@@ -1,0 +1,28 @@
+# NVIDIA GPU Operator (spec 3.2). The host owns the driver and the container
+# toolkit because Slurm/Enroot use the same ones; the operator provides the
+# device plugin and GPU feature discovery. DCGM exporter runs on the host as a
+# systemd container instead (spec 6.1), so the operator's copy is disabled.
+driver:
+  enabled: false
+toolkit:
+  enabled: false        # deviation from spec text: host toolkit is already installed for Enroot/podman
+dcgmExporter:
+  enabled: false
+dcgm:
+  enabled: false        # host nv-hostengine is used
+devicePlugin:
+  enabled: true
+gfd:
+  enabled: true
+nfd:
+  enabled: true
+migManager:
+  enabled: false
+validator:
+  driver:
+    env:
+      - name: DISABLE_DEV_CHAR_SYMLINK_CREATION
+        value: "true"
+cdi:
+  enabled: true
+  default: false

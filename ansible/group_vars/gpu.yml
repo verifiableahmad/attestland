@@ -1,0 +1,1 @@
+pool: "{{ 'k8s' if inventory_hostname == groups['gpu'][-1] else default_pool }}"

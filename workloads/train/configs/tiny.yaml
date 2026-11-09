@@ -1,0 +1,14 @@
+# CPU smoke test: tiny model, synthetic shards. Not for numbers.
+run_name: tiny
+run_dir: /tmp/al-tiny/run
+seed: 1337
+device: cpu
+write_result: false
+textfile_dir: /tmp/al-tiny/textfile
+model: {block_size: 64, vocab_size: 2048, n_layer: 2, n_head: 2, n_embd: 64, dropout: 0.0}
+data: {dir: /tmp/al-tiny/data, verify: true}
+train: {micro_batch: 4, grad_accum: 2, token_budget: 40960, warmup_steps_excluded: 2, compile: false}
+optim: {lr: 3.0e-3, min_lr: 3.0e-4, warmup_steps: 5, weight_decay: 0.1, grad_clip: 1.0}
+dist: {timeout_s: 60}
+checkpoint: {local_dir: /tmp/al-tiny/ckpt, durable_uri: null, mode: sync_nvme, interval_s: 0.5, keep_local: 2}
+hardware: {peak_bf16_flops: 1.0e12}

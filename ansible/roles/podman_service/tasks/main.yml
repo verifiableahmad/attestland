@@ -1,0 +1,22 @@
+# Run one container as a systemd service with podman.
+# vars: svc_name, svc_image, svc_args (list), svc_volumes (list), svc_env (dict),
+#       svc_gpus (bool), svc_command (string), svc_network (default host)
+- name: "Unit for {{ svc_name }}"
+  ansible.builtin.template:
+    src: container.service.j2
+    dest: "/etc/systemd/system/{{ svc_name }}.service"
+    mode: "0644"
+  register: unit
+
+- name: "Pull {{ svc_image }}"
+  ansible.builtin.command: "podman pull {{ svc_image }}"
+  register: pull
+  changed_when: "'Writing manifest' in pull.stderr"
+  when: not svc_image.startswith('localhost/')
+
+- name: "Start {{ svc_name }}"
+  ansible.builtin.systemd:
+    name: "{{ svc_name }}"
+    enabled: true
+    state: "{{ 'restarted' if unit.changed or (pull.changed | default(false)) else 'started' }}"
+    daemon_reload: "{{ unit.changed }}"

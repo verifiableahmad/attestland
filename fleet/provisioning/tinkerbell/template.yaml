@@ -1,0 +1,102 @@
+# One workflow: wipe disk -> stream Ubuntu 22.04 -> cloud-init -> node agent -> reboot.
+# The node agent reports Burn-in on first boot, which hands the node to burn-in.
+apiVersion: tinkerbell.org/v1alpha1
+kind: Template
+metadata:
+  name: al-ubuntu-2204
+  namespace: tink-system
+spec:
+  data: |
+    version: "0.1"
+    name: al-ubuntu-2204
+    global_timeout: 1800
+    tasks:
+      - name: os-install
+        worker: "{{.device_1}}"
+        volumes:
+          - /dev:/dev
+          - /dev/console:/dev/console
+          - /lib/firmware:/lib/firmware:ro
+        actions:
+          - name: wipe-disk
+            image: busybox:1.36
+            timeout: 120
+            command: ["/bin/sh", "-c", "dd if=/dev/zero of=/dev/vda bs=1M count=64 conv=fsync"]
+          - name: stream-ubuntu-image
+            image: quay.io/tinkerbell/actions/image2disk:v1.0.0
+            timeout: 900
+            environment:
+              DEST_DISK: /dev/vda
+              IMG_URL: "http://{{ .metadata.instance.host_ip }}:8080/jammy.raw.gz"
+              COMPRESSED: true
+          - name: grow-root
+            image: quay.io/tinkerbell/actions/cexec:v1.0.0
+            timeout: 120
+            environment:
+              BLOCK_DEVICE: /dev/vda1
+              FS_TYPE: ext4
+              CHROOT: y
+              DEFAULT_INTERPRETER: "/bin/sh -c"
+              CMD_LINE: "growpart /dev/vda 1 || true; resize2fs /dev/vda1 || true"
+          - name: write-cloud-init
+            image: quay.io/tinkerbell/actions/writefile:v1.0.0
+            timeout: 60
+            environment:
+              DEST_DISK: /dev/vda1
+              FS_TYPE: ext4
+              DEST_PATH: /etc/cloud/cloud.cfg.d/10_tinkerbell.cfg
+              UID: 0
+              GID: 0
+              MODE: 0600
+              DIRMODE: 0700
+              CONTENTS: |
+                datasource:
+                  Ec2:
+                    metadata_urls: ["http://{{ .metadata.instance.host_ip }}:50061"]
+                    strict_id: false
+                system_info:
+                  default_user:
+                    name: ubuntu
+                    lock_passwd: true
+                manage_etc_hosts: localhost
+                warnings:
+                  dsid_missing_source: off
+          - name: write-ds-identify
+            image: quay.io/tinkerbell/actions/writefile:v1.0.0
+            timeout: 60
+            environment:
+              DEST_DISK: /dev/vda1
+              FS_TYPE: ext4
+              DEST_PATH: /etc/cloud/ds-identify.cfg
+              UID: 0
+              GID: 0
+              MODE: 0600
+              DIRMODE: 0700
+              CONTENTS: |
+                datasource: Ec2
+          - name: install-node-agent
+            image: quay.io/tinkerbell/actions/cexec:v1.0.0
+            timeout: 120
+            environment:
+              BLOCK_DEVICE: /dev/vda1
+              FS_TYPE: ext4
+              CHROOT: y
+              DEFAULT_INTERPRETER: "/bin/sh -c"
+              CMD_LINE: >-
+                mkdir -p /etc/fleet &&
+                echo FLEET_STATE_URL=http://{{ .metadata.instance.host_ip }}:8090 > /etc/fleet/agent.env &&
+                echo FLEET_HANDOFF=Burn-in >> /etc/fleet/agent.env &&
+                wget -qO /usr/local/sbin/node-agent http://{{ .metadata.instance.host_ip }}:8080/node-agent.sh &&
+                chmod 0755 /usr/local/sbin/node-agent &&
+                wget -qO /etc/systemd/system/node-agent.service http://{{ .metadata.instance.host_ip }}:8080/node-agent.service &&
+                ln -sf /etc/systemd/system/node-agent.service /etc/systemd/system/multi-user.target.wants/node-agent.service
+          - name: reboot
+            image: ghcr.io/jacobweinstock/waitdaemon:0.2.2
+            timeout: 90
+            pid: host
+            command: ["reboot"]
+            environment:
+              IMAGE: alpine
+              WAIT_SECONDS: 5
+            volumes:
+              - /var/run/docker.sock:/var/run/docker.sock

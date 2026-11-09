@@ -1,0 +1,12 @@
+[Unit]
+Description=Attestland node agent (lifecycle report)
+Wants=network-online.target
+After=network-online.target cloud-init.service
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/sbin/node-agent
+RemainAfterExit=yes
+
+[Install]
+WantedBy=multi-user.target

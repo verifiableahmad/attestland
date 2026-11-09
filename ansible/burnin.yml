@@ -1,0 +1,36 @@
+# make burnin: run the burn-in pipeline on every GPU node (or -l <node>).
+- hosts: gpu
+  become: true
+  serial: 2   # pairs: the inter-node check needs a known-good peer
+  tasks:
+    - name: Copy burn-in pipeline
+      ansible.builtin.copy:
+        src: "{{ playbook_dir }}/../fleet/burnin/"
+        dest: /opt/al/burnin/
+        mode: preserve
+    - name: Run burn-in
+      ansible.builtin.command:
+        cmd: >-
+          /opt/al/burnin/burnin.sh
+          --peer {{ hostvars[burnin_peer | default(groups['gpu'] | difference([inventory_hostname]) | first)].private_ip }}
+          --sku {{ al_gpu_instance_type }}
+          --report /var/lib/fleet/burnin-report.json
+      register: burnin
+      changed_when: true
+      failed_when: false
+    - name: Fetch report
+      ansible.builtin.fetch:
+        src: /var/lib/fleet/burnin-report.json
+        dest: "{{ playbook_dir }}/../bench/results/burnin/{{ inventory_hostname }}-report.json"
+        flat: true
+    - name: Report to the control VM
+      delegate_to: "{{ groups['control'][0] }}"
+      ansible.builtin.copy:
+        src: "{{ playbook_dir }}/../bench/results/burnin/{{ inventory_hostname }}-report.json"
+        dest: /var/lib/fleet/reports/{{ inventory_hostname }}.json
+        mode: "0644"
+    - name: Apply verdict to both schedulers
+      delegate_to: "{{ groups['control'][0] }}"
+      ansible.builtin.command:
+        cmd: /opt/al/bin/fleet-label {{ inventory_hostname }} {{ 'passed' if burnin.rc == 0 else 'failed' }} /var/lib/fleet/reports/{{ inventory_hostname }}.json
+      changed_when: true

@@ -1,0 +1,36 @@
+- name: kubeadm init
+  ansible.builtin.command: >-
+    kubeadm init
+    --kubernetes-version v{{ kubernetes_version }}
+    --pod-network-cidr {{ k8s_pod_cidr }}
+    --service-cidr {{ k8s_service_cidr }}
+    --apiserver-advertise-address {{ private_ip }}
+    --apiserver-cert-extra-sans {{ ansible_host }}
+  args:
+    creates: /etc/kubernetes/admin.conf
+
+- name: kubeconfig for root
+  ansible.builtin.copy:
+    src: /etc/kubernetes/admin.conf
+    dest: /root/.kube/config
+    remote_src: true
+    mode: "0600"
+
+- name: Calico CNI
+  ansible.builtin.command: kubectl apply -f https://raw.githubusercontent.com/projectcalico/calico/{{ calico_version }}/manifests/calico.yaml
+  changed_when: true
+
+- name: Join command for workers
+  ansible.builtin.command: kubeadm token create --print-join-command --ttl 1h
+  register: join_cmd
+  changed_when: false
+
+- name: Share join command
+  ansible.builtin.set_fact:
+    k8s_join_command: "{{ join_cmd.stdout }}"
+
+- name: Fetch kubeconfig for the operator laptop
+  ansible.builtin.fetch:
+    src: /etc/kubernetes/admin.conf
+    dest: "{{ playbook_dir }}/inventory/kubeconfig-{{ al_cloud }}"
+    flat: true

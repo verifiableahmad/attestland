@@ -1,0 +1,112 @@
+# healthd as a leader-elected Deployment (spec 1.3). Apply with kustomize-free
+# kubectl; the jwt key Secret and rules ConfigMap are created by Ansible.
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: fleet-system
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: healthd
+  namespace: fleet-system
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: healthd
+rules:
+  - apiGroups: [""]
+    resources: [nodes]
+    verbs: [get, list, watch, patch, update]
+  - apiGroups: [""]
+    resources: [events]
+    verbs: [create, patch]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: healthd
+roleRef: {apiGroup: rbac.authorization.k8s.io, kind: ClusterRole, name: healthd}
+subjects: [{kind: ServiceAccount, name: healthd, namespace: fleet-system}]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: healthd-leader
+  namespace: fleet-system
+rules:
+  - apiGroups: [coordination.k8s.io]
+    resources: [leases]
+    verbs: [get, list, watch, create, update, patch, delete]
+  - apiGroups: [""]
+    resources: [events]
+    verbs: [create, patch]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: healthd-leader
+  namespace: fleet-system
+roleRef: {apiGroup: rbac.authorization.k8s.io, kind: Role, name: healthd-leader}
+subjects: [{kind: ServiceAccount, name: healthd, namespace: fleet-system}]
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: healthd
+  namespace: fleet-system
+spec:
+  replicas: 2
+  selector:
+    matchLabels: {app: healthd}
+  template:
+    metadata:
+      labels: {app: healthd}
+    spec:
+      serviceAccountName: healthd
+      # Run on the control plane, never on a GPU node it might drain.
+      nodeSelector:
+        node-role.kubernetes.io/control-plane: ""
+      tolerations:
+        - {key: node-role.kubernetes.io/control-plane, operator: Exists, effect: NoSchedule}
+      containers:
+        - name: healthd
+          image: HEALTHD_IMAGE
+          args:
+            - --rules=/etc/healthd/rules/rules.yaml
+            - --prometheus-url=http://CONTROL_IP:9090
+            - --loki-url=http://CONTROL_IP:3100
+            - --alertmanager-url=http://CONTROL_IP:9093
+            - --slurm-url=http://CONTROL_IP:6820
+            - --slurm-jwt-key=/etc/healthd/slurm/jwt_hs256.key
+            - --leader-namespace=fleet-system
+            - --dry-run=DRY_RUN
+          ports:
+            - {name: metrics, containerPort: 8081}
+            - {name: events, containerPort: 8082}
+          readinessProbe:
+            httpGet: {path: /healthz, port: 8083}
+          volumeMounts:
+            - {name: rules, mountPath: /etc/healthd/rules}
+            - {name: slurm-jwt, mountPath: /etc/healthd/slurm, readOnly: true}
+          resources:
+            requests: {cpu: 50m, memory: 64Mi}
+            limits: {memory: 256Mi}
+      volumes:
+        - name: rules
+          configMap: {name: healthd-rules}
+        - name: slurm-jwt
+          secret: {secretName: healthd-slurm-jwt}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: healthd
+  namespace: fleet-system
+spec:
+  type: NodePort
+  selector: {app: healthd}
+  ports:
+    - {name: metrics, port: 8081, targetPort: metrics, nodePort: 30081}
+    - {name: events, port: 8082, targetPort: events, nodePort: 30082}

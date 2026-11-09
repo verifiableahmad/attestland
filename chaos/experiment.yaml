@@ -1,0 +1,45 @@
+# Goodput experiment (spec 6.3). Both arms use the same seeded schedule.
+name: goodput-v1
+train_config: workloads/train/configs/gpt124m.yaml
+nodes: 4                          # job size; all four GPU nodes in the Slurm pool
+token_budget: 800_000_000         # same budget as every goodput run
+repeats: 3
+seed: 20261107
+
+failures:
+  # Accelerated MTBF: several failures per ~1.5 h run (spec: "several failures per run").
+  mtbf_s: 1200
+  min_gap_s: 300                  # leave time to resume between faults
+  start_after_s: 300              # first fault no earlier than 5 min into the run
+  mix:                            # relative weights
+    node-loss: 2
+    rank-crash: 3
+    gpu-fault: 2
+    slow-gpu: 1
+    disk-full: 1
+    net-delay: 1
+    pkt-loss: 1
+  durations_s:                    # how long degradation faults stay applied
+    slow-gpu: 300
+    net-delay: 180
+    pkt-loss: 180
+    disk-full: 600
+  node_return_s: 120              # a stopped VM is started / a faulted node 'repaired' after this
+  # healthd allows 1 drain/hour on 4 nodes; deploy it with --budget-min=8 for the experiment
+
+arms:
+  A:
+    description: No automatic resume. A simulated operator resubmits after a fixed delay.
+    auto_requeue: false
+    healthd: dry-run
+    operator_delay_s: 900
+    checkpoint_mode: sync_nvme
+  B:
+    description: healthd drains, Slurm requeues, resume from the latest checkpoint, async checkpoints.
+    auto_requeue: true
+    healthd: enforce
+    checkpoint_mode: async
+
+checkpoint:
+  # Written by `make ckpt-interval` (storage/interval.py, Young-Daly) from the Layer 5 measurements.
+  interval_s: 600

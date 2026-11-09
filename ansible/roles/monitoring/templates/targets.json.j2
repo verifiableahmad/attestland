@@ -1,0 +1,1 @@
+[{% for h in item.hosts %}{"targets": ["{{ hostvars[h].private_ip }}:{{ item.port }}"], "labels": {"job": "{{ item.job }}", "node": "{{ h }}"}}{{ "," if not loop.last }}{% endfor %}]

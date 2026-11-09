@@ -1,0 +1,26 @@
+# Kueue controller config: enable Job, plain Pod and Deployment integrations so
+# the vLLM Deployment is admitted through the serving LocalQueue.
+apiVersion: config.kueue.x-k8s.io/v1beta1
+kind: Configuration
+health:
+  healthProbeBindAddress: :8081
+metrics:
+  bindAddress: :8443
+  enableClusterQueueResources: true
+webhook:
+  port: 9443
+leaderElection:
+  leaderElect: true
+  resourceName: c1f6bfd2.kueue.x-k8s.io
+manageJobsWithoutQueueName: false
+integrations:
+  frameworks:
+    - batch/job
+    - pod
+    - deployment
+  podOptions:
+    namespaceSelector:
+      matchExpressions:
+        - key: kubernetes.io/metadata.name
+          operator: In
+          values: [serving, batch-eval]

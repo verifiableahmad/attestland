@@ -1,0 +1,8 @@
+project_id          = "REPLACE-gcp-project-id"
+project_number      = "REPLACE-123456789012"
+billing_account_id  = "REPLACE-000000-000000-000000"
+admin_cidrs         = ["REPLACE.your.ip.addr/32"]
+spot                = true # false for timed benchmarks
+phase               = 2
+ssh_public_key_path = "~/.ssh/id_ed25519.pub"
+# gpu_image         = "projects/REPLACE/global/images/family/al-gpu-ubuntu-2204"

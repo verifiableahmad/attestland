@@ -1,0 +1,59 @@
+- name: MariaDB for slurmdbd
+  ansible.builtin.apt:
+    name: [mariadb-server, python3-pymysql]
+
+- name: Accounting database and user
+  community.mysql.mysql_user:
+    name: slurm
+    password: "{{ slurmdbd_db_password }}"
+    priv: "slurm_acct_db.*:ALL"
+    login_unix_socket: /run/mysqld/mysqld.sock
+  no_log: true
+
+- name: slurmdbd.conf
+  ansible.builtin.template:
+    src: "{{ playbook_dir }}/../sched/slurm/slurmdbd.conf.j2"
+    dest: /etc/slurm/slurmdbd.conf
+    owner: "{{ slurm_user }}"
+    mode: "0600"
+
+- name: slurmrestd override directory
+  ansible.builtin.file:
+    path: /etc/systemd/system/slurmrestd.service.d
+    state: directory
+    mode: "0755"
+
+- name: slurmrestd unit override (JWT, port 6820)
+  ansible.builtin.copy:
+    dest: /etc/systemd/system/slurmrestd.service.d/override.conf
+    content: |
+      [Service]
+      User=nobody
+      Environment=SLURM_JWT=daemon
+      ExecStart=
+      ExecStart=/usr/sbin/slurmrestd -a rest_auth/jwt 0.0.0.0:6820
+    mode: "0644"
+
+- name: Controller daemons
+  ansible.builtin.systemd:
+    name: "{{ item }}"
+    enabled: true
+    state: restarted
+    daemon_reload: true
+  loop: [slurmdbd, slurmctld, slurmrestd]
+
+- name: Register cluster in accounting
+  ansible.builtin.shell: sacctmgr -i add cluster {{ cluster_name }} || true
+  changed_when: false
+
+- name: fleet-label helper (burn-in verdict -> both schedulers)
+  ansible.builtin.copy:
+    src: "{{ playbook_dir }}/../fleet/burnin/fleet-label"
+    dest: /opt/al/bin/fleet-label
+    mode: "0755"
+
+- name: pool-move command
+  ansible.builtin.copy:
+    src: "{{ playbook_dir }}/../sched/pool-move.sh"
+    dest: /opt/al/bin/pool-move
+    mode: "0755"

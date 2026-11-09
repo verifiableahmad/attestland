@@ -1,0 +1,8 @@
+# make up POOL=cc: confidential H100 bring-up (spec 7.2) and the non-CC twin.
+- hosts: cc
+  become: true
+  roles: [common, cc_bringup, receipts_issuer]
+
+- hosts: twin
+  become: true
+  roles: [common, twin_bringup]

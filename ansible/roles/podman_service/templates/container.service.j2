@@ -1,0 +1,25 @@
+# Managed by Ansible (podman_service role).
+[Unit]
+Description={{ svc_name }} container
+Wants=network-online.target
+After=network-online.target
+
+[Service]
+Restart=always
+RestartSec=5
+ExecStartPre=-/usr/bin/podman rm -f {{ svc_name }}
+ExecStart=/usr/bin/podman run --rm --name {{ svc_name }} \
+  --network {{ svc_network | default('host') }} \
+{% if svc_gpus | default(false) %}  --device nvidia.com/gpu=all --cap-add SYS_ADMIN \
+{% endif %}
+{% for v in svc_volumes | default([]) %}  -v {{ v }} \
+{% endfor %}
+{% for k, v in (svc_env | default({})).items() %}  -e {{ k }}={{ v | quote }} \
+{% endfor %}
+{% for a in svc_args | default([]) %}  {{ a }} \
+{% endfor %}
+  {{ svc_image }} {{ svc_command | default('') }}
+ExecStop=/usr/bin/podman stop -t 10 {{ svc_name }}
+
+[Install]
+WantedBy=multi-user.target

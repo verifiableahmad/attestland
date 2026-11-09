@@ -1,0 +1,84 @@
+# Kueue (spec 3.2): one ResourceFlavor per GPU type, one ClusterQueue with an
+# nvidia.com/gpu quota, LocalQueues for serving and batch-eval, and priorities
+# so serving preempts batch work. The flavor is topology-aware (ADR 007).
+apiVersion: kueue.x-k8s.io/v1beta1
+kind: ResourceFlavor
+metadata:
+  name: nvidia-l4
+spec:
+  nodeLabels:
+    nvidia.com/gpu.product: NVIDIA-L4
+    fleet.attestland/pool: k8s
+  tolerations: []
+  # Topology-aware placement (topology.yaml, ADR 007). With this set, the
+  # ClusterQueue is topology-aware: multi-pod jobs annotate their pod template
+  # (tas-example.yaml); single-pod work says podset-unconstrained-topology.
+  topologyName: gpu
+---
+apiVersion: kueue.x-k8s.io/v1beta1
+kind: ClusterQueue
+metadata:
+  name: gpu
+spec:
+  namespaceSelector: {}
+  queueingStrategy: BestEffortFIFO
+  preemption:
+    withinClusterQueue: LowerPriority
+    reclaimWithinCohort: Never
+  resourceGroups:
+    - coveredResources: ["cpu", "memory", "nvidia.com/gpu"]
+      flavors:
+        - name: nvidia-l4
+          resources:
+            - name: cpu
+              nominalQuota: 28
+            - name: memory
+              nominalQuota: 112Gi
+            - name: nvidia.com/gpu
+              nominalQuota: 1          # GPUs in the k8s pool; raise on pool-move
+---
+apiVersion: kueue.x-k8s.io/v1beta1
+kind: LocalQueue
+metadata:
+  name: serving
+  namespace: serving
+spec:
+  clusterQueue: gpu
+---
+apiVersion: kueue.x-k8s.io/v1beta1
+kind: LocalQueue
+metadata:
+  name: batch-eval
+  namespace: batch-eval
+spec:
+  clusterQueue: gpu
+---
+apiVersion: kueue.x-k8s.io/v1beta1
+kind: WorkloadPriorityClass
+metadata:
+  name: serving
+value: 1000
+description: Online serving; preempts batch work.
+---
+apiVersion: kueue.x-k8s.io/v1beta1
+kind: WorkloadPriorityClass
+metadata:
+  name: batch
+value: 100
+description: Batch evaluation.
+---
+apiVersion: scheduling.k8s.io/v1
+kind: PriorityClass
+metadata:
+  name: serving
+value: 1000
+preemptionPolicy: PreemptLowerPriority
+globalDefault: false
+---
+apiVersion: scheduling.k8s.io/v1
+kind: PriorityClass
+metadata:
+  name: batch
+value: 100
+preemptionPolicy: Never
+globalDefault: false

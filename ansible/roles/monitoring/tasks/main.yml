@@ -1,0 +1,84 @@
+# Prometheus, Alertmanager, Grafana, Loki, Slurm exporter on the control VM (spec 6.1).
+- name: Config directories
+  ansible.builtin.file:
+    path: "{{ item }}"
+    state: directory
+    mode: "0755"
+  loop: [/etc/prometheus, /etc/prometheus/targets, /etc/prometheus/secrets, /etc/alertmanager, /etc/loki,
+         /etc/grafana/provisioning/datasources, /etc/grafana/provisioning/dashboards, /var/lib/grafana/dashboards,
+         /var/lib/prometheus, /var/lib/loki, /var/lib/grafana]
+
+- name: Static configs and dashboards
+  ansible.builtin.copy:
+    src: "{{ playbook_dir }}/../observability/{{ item.src }}"
+    dest: "{{ item.dest }}"
+  loop:
+    - {src: prometheus/prometheus.yml, dest: /etc/prometheus/prometheus.yml}
+    - {src: prometheus/rules/, dest: /etc/prometheus/rules/}
+    - {src: loki/loki.yaml, dest: /etc/loki/loki.yaml}
+    - {src: grafana/provisioning/datasources.yaml, dest: /etc/grafana/provisioning/datasources/al.yaml}
+    - {src: grafana/provisioning/dashboards.yaml, dest: /etc/grafana/provisioning/dashboards/al.yaml}
+    - {src: dashboards/, dest: /var/lib/grafana/dashboards/}
+
+- name: Alertmanager config
+  ansible.builtin.template:
+    src: "{{ playbook_dir }}/../observability/alertmanager/alertmanager.yml.j2"
+    dest: /etc/alertmanager/alertmanager.yml
+
+- name: Scrape targets
+  ansible.builtin.template:
+    src: targets.json.j2
+    dest: "/etc/prometheus/targets/{{ item.job }}.json"
+  loop:
+    - {job: node, hosts: "{{ groups['all'] }}", port: 9100}
+    - {job: dcgm, hosts: "{{ groups['gpu'] }}", port: 9400}
+    - {job: slurm, hosts: "{{ groups['control'] }}", port: 9341}
+    - {job: healthd, hosts: "{{ groups['control'] }}", port: 30081}
+    - {job: vllm, hosts: "{{ groups['gpu'] }}", port: 30800}
+    - {job: kueue, hosts: "{{ groups['control'] }}", port: 30443}
+
+- name: Grafana and Loki data ownership
+  ansible.builtin.file:
+    path: "{{ item.p }}"
+    owner: "{{ item.u }}"
+    recurse: true
+  loop: [{p: /var/lib/grafana, u: "472"}, {p: /var/lib/loki, u: "10001"}, {p: /var/lib/prometheus, u: "65534"}]
+
+- name: Containers
+  ansible.builtin.include_role:
+    name: podman_service
+  vars:
+    svc_name: "{{ item.name }}"
+    svc_image: "{{ item.image }}"
+    svc_volumes: "{{ item.volumes }}"
+    svc_env: "{{ item.env | default({}) }}"
+    svc_command: "{{ item.command | default('') }}"
+  loop:
+    - name: prometheus
+      image: "{{ prometheus_image }}"
+      volumes: ["/etc/prometheus:/etc/prometheus:ro", "/var/lib/prometheus:/prometheus"]
+      command: "--config.file=/etc/prometheus/prometheus.yml --storage.tsdb.path=/prometheus --storage.tsdb.retention.time=30d --web.enable-lifecycle"
+    - name: alertmanager
+      image: "{{ alertmanager_image }}"
+      volumes: ["/etc/alertmanager:/etc/alertmanager:ro"]
+      command: "--config.file=/etc/alertmanager/alertmanager.yml"
+    - name: loki
+      image: "{{ loki_image }}"
+      volumes: ["/etc/loki:/etc/loki:ro", "/var/lib/loki:/loki"]
+      command: "-config.file=/etc/loki/loki.yaml"
+    - name: grafana
+      image: "{{ grafana_image }}"
+      volumes: ["/etc/grafana/provisioning:/etc/grafana/provisioning:ro", "/var/lib/grafana:/var/lib/grafana"]
+      env: {GF_SECURITY_ADMIN_PASSWORD: "{{ grafana_admin_password }}", GF_AUTH_ANONYMOUS_ENABLED: "false"}
+    - name: slurm-exporter
+      image: "{{ slurm_exporter_image }}"
+      volumes: ["/etc/slurm:/etc/slurm:ro", "/run/munge:/run/munge", "/usr/bin/sinfo:/usr/bin/sinfo:ro", "/usr/bin/squeue:/usr/bin/squeue:ro"]
+      command: "-web.listen-address=:9341"
+  loop_control:
+    label: "{{ item.name }}"
+
+- name: Goodput textfile directory on control
+  ansible.builtin.file:
+    path: "{{ textfile_dir }}"
+    state: directory
+    mode: "1777"

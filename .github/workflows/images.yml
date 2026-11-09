@@ -1,0 +1,46 @@
+# Build images, push to GHCR, sign keyless with cosign (Fulcio cert from this
+# workflow's OIDC identity, Rekor entry) and attach SLSA build provenance (spec 7.4).
+# The receipt issuer accepts only images whose signature names this workflow:
+#   https://github.com/<owner>/<repo>/.github/workflows/images.yml@refs/heads/main
+name: images
+on:
+  push:
+    branches: [main]
+    paths: [images/**, fleet/healthd/**, .github/workflows/images.yml]
+  workflow_dispatch:
+permissions:
+  contents: read
+  packages: write
+  id-token: write
+  attestations: write
+jobs:
+  build:
+    runs-on: ubuntu-24.04
+    strategy:
+      matrix:
+        include:
+          - {name: vllm-receipts, context: images/vllm-receipts}
+          - {name: healthd, context: fleet/healthd}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: sigstore/cosign-installer@v3
+        with: {cosign-release: v2.6.0}
+      - uses: docker/login-action@v3
+        with: {registry: ghcr.io, username: "${{ github.actor }}", password: "${{ secrets.GITHUB_TOKEN }}"}
+      - uses: docker/setup-buildx-action@v3
+      - id: push
+        uses: docker/build-push-action@v6
+        with:
+          context: ${{ matrix.context }}
+          push: true
+          provenance: false
+          tags: ghcr.io/${{ github.repository }}/${{ matrix.name }}:${{ github.sha }}
+      - name: Sign keyless
+        run: cosign sign --yes "ghcr.io/${{ github.repository }}/${{ matrix.name }}@${{ steps.push.outputs.digest }}"
+      - name: SLSA build provenance (Sigstore bundle, pushed to the registry)
+        uses: actions/attest-build-provenance@v2
+        with:
+          subject-name: ghcr.io/${{ github.repository }}/${{ matrix.name }}
+          subject-digest: ${{ steps.push.outputs.digest }}
+          push-to-registry: true
+      - run: echo "ghcr.io/${{ github.repository }}/${{ matrix.name }}@${{ steps.push.outputs.digest }}" >> "$GITHUB_STEP_SUMMARY"

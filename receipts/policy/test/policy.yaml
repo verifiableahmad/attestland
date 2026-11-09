@@ -1,0 +1,19 @@
+# Test-platform policy, GCA-shaped CPU token: pins the keys alissue --platform
+# test generates (alissue --test-keys policy/test). Never use for real receipts.
+cpu:
+  type: test
+  verifier: gca
+  issuer: https://test-cpu.attestland.local
+  jwks_file: cpu-jwks.json
+  allow_debug: false
+  require:
+    submods.gce.project_id: test-project
+gpu:
+  verifier: nras
+  issuer: https://test-nras.attestland.local
+  jwks_file: nras-jwks.json
+  allowed_driver_versions: ["580.82.07"]
+image:
+  trusted_root: trusted_root.json
+  certificate_identity: ci@attestland.test
+  certificate_oidc_issuer: https://token.actions.githubusercontent.com

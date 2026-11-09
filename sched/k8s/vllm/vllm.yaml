@@ -1,0 +1,100 @@
+# vLLM serving (spec 3.2 / 4.2): OpenAI-compatible API, weights pulled from
+# the durable bucket, readiness on /health, Service in front. MODEL_PREFIX selects the model.
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: vllm-model
+  namespace: serving
+data:
+  MODEL_PREFIX: models/al-gpt-124m-hf   # or models/<open 7-8B model>
+  SERVED_NAME: al-gpt
+  MAX_MODEL_LEN: "1024"
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: vllm
+  namespace: serving
+  labels:
+    app: vllm
+    kueue.x-k8s.io/queue-name: serving
+    kueue.x-k8s.io/priority-class: serving
+spec:
+  replicas: 1
+  strategy:
+    type: Recreate      # one GPU: the old pod must release it first
+  selector:
+    matchLabels: {app: vllm}
+  template:
+    metadata:
+      labels: {app: vllm}
+      annotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/port: "8000"
+        kueue.x-k8s.io/podset-unconstrained-topology: "true"   # single pod: no placement constraint (ADR 007)
+    spec:
+      priorityClassName: serving
+      tolerations:
+        - {key: fleet.attestland/pool, operator: Equal, value: k8s, effect: NoSchedule}
+      nodeSelector:
+        fleet.attestland/pool: k8s
+      initContainers:
+        - name: fetch-weights
+          image: amazon/aws-cli:2.27.50
+          envFrom:
+            - configMapRef: {name: vllm-model}
+            - secretRef: {name: s3-creds}
+          command: ["sh", "-c"]
+          args:
+            - AWS_ACCESS_KEY_ID="$S3_ACCESS_KEY" AWS_SECRET_ACCESS_KEY="$S3_SECRET_KEY"
+              AWS_REQUEST_CHECKSUM_CALCULATION=when_required AWS_RESPONSE_CHECKSUM_VALIDATION=when_required
+              aws --endpoint-url "$S3_ENDPOINT" s3 sync --delete "s3://${S3_BUCKET_PREFIX:+$S3_BUCKET_PREFIX-}$MODEL_PREFIX" /models/current
+          volumeMounts:
+            - {name: models, mountPath: /models}
+      containers:
+        - name: vllm
+          image: vllm/vllm-openai:v0.11.0
+          envFrom:
+            - configMapRef: {name: vllm-model}
+          args:
+            - --model=/models/current
+            - --served-model-name=$(SERVED_NAME)
+            - --max-model-len=$(MAX_MODEL_LEN)
+            - --gpu-memory-utilization=0.90
+            - --disable-log-requests
+          ports:
+            - {name: http, containerPort: 8000}
+          readinessProbe:
+            httpGet: {path: /health, port: http}
+            periodSeconds: 5
+            failureThreshold: 3
+          livenessProbe:
+            httpGet: {path: /health, port: http}
+            initialDelaySeconds: 300
+            periodSeconds: 15
+          resources:
+            limits:
+              nvidia.com/gpu: 1
+              memory: 24Gi
+            requests:
+              cpu: "4"
+              memory: 16Gi
+          volumeMounts:
+            - {name: models, mountPath: /models}
+            - {name: shm, mountPath: /dev/shm}
+      volumes:
+        - name: models
+          hostPath: {path: /scratch/models, type: DirectoryOrCreate}
+        - name: shm
+          emptyDir: {medium: Memory, sizeLimit: 2Gi}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: vllm
+  namespace: serving
+spec:
+  type: NodePort
+  selector: {app: vllm}
+  ports:
+    - {name: http, port: 8000, targetPort: http, nodePort: 30800}

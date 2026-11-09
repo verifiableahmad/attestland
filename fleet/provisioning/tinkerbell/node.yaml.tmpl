@@ -1,0 +1,74 @@
+# Rendered once per VM by provision.sh (__NAME__, __MAC__, __IP__, __UUID__, __HOST_IP__).
+apiVersion: tinkerbell.org/v1alpha1
+kind: Hardware
+metadata:
+  name: __NAME__
+  namespace: tink-system
+  labels:
+    fleet.attestland/state: Provisioning
+spec:
+  bmcRef:
+    apiGroup: bmc.tinkerbell.org
+    kind: Machine
+    name: __NAME__-bmc
+  disks:
+    - device: /dev/vda
+  metadata:
+    facility:
+      facility_code: lab
+    instance:
+      hostname: __NAME__
+      id: __MAC__
+      host_ip: __HOST_IP__
+      operating_system:
+        distro: ubuntu
+        version: "22.04"
+  interfaces:
+    - dhcp:
+        arch: x86_64
+        hostname: __NAME__
+        ip:
+          address: __IP__
+          gateway: __HOST_IP__
+          netmask: 255.255.255.0
+        lease_time: 86400
+        mac: __MAC__
+        name_servers: [1.1.1.1, 8.8.8.8]
+        uefi: false
+      netboot:
+        allowPXE: true
+        allowWorkflow: true
+---
+apiVersion: bmc.tinkerbell.org/v1alpha1
+kind: Machine
+metadata:
+  name: __NAME__-bmc
+  namespace: tink-system
+spec:
+  connection:
+    host: __HOST_IP__
+    port: 8000
+    insecureTLS: true
+    authSecretRef:
+      name: bmc-creds
+      namespace: tink-system
+    providerOptions:
+      preferredOrder: [redfish]
+      redfish:
+        port: 8000
+        useBasicAuth: true
+        systemName: __UUID__
+---
+apiVersion: tinkerbell.org/v1alpha1
+kind: Workflow
+metadata:
+  name: __NAME__-install
+  namespace: tink-system
+spec:
+  templateRef: al-ubuntu-2204
+  hardwareRef: __NAME__
+  hardwareMap:
+    device_1: __MAC__
+  bootOptions:
+    toggleAllowNetboot: true
+    bootMode: netboot          # Rufio: set PXE as next boot, power on via Redfish

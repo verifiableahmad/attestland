@@ -1,0 +1,9 @@
+# CC overhead benchmark (spec 7.7): the confidential VM against its non-CC twin.
+hosts:
+  cc: al-cc-h100          # a3-highgpu-1g, Intel TDX + H100 80GB, CC on (both Spot, same zone)
+  noncc: al-noncc-h100    # a3-highgpu-1g, same GPU, no TDX and no CC
+image_env: VLLM_RECEIPTS_IMAGE   # same pinned image (by digest) on both
+model_dir: /models/current
+repeats: 3
+receipts_per_repeat: 5           # attestation time per receipt (CC host only)
+serve_config: workloads/serve/sweep.yaml   # same vLLM, model and sweep as Layer 4

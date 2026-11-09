@@ -1,0 +1,37 @@
+# Host driver (the GPU Operator runs with driver.enabled=false; Slurm needs the same driver).
+- name: Current driver version
+  ansible.builtin.command: nvidia-smi --query-gpu=driver_version --format=csv,noheader
+  register: drv
+  changed_when: false
+  failed_when: false
+
+- name: CUDA apt repository keyring
+  ansible.builtin.apt:
+    deb: https://developer.download.nvidia.com/compute/cuda/repos/ubuntu2204/x86_64/cuda-keyring_1.1-1_all.deb
+  when: drv.rc != 0 or (drv.stdout_lines | first | default('')) != nvidia_driver_version
+
+- name: Install pinned open-kernel driver
+  ansible.builtin.apt:
+    name:
+      - "nvidia-driver-{{ nvidia_driver_branch }}-open={{ nvidia_driver_version }}-0ubuntu1"
+      - "nvidia-fabricmanager-{{ nvidia_driver_branch }}={{ nvidia_driver_version }}-1"
+    update_cache: true
+    allow_downgrade: true
+  when: drv.rc != 0 or (drv.stdout_lines | first | default('')) != nvidia_driver_version
+  register: drv_install
+
+- name: Hold driver packages
+  ansible.builtin.dpkg_selections:
+    name: "nvidia-driver-{{ nvidia_driver_branch }}-open"
+    selection: hold
+
+- name: Persistence daemon
+  ansible.builtin.systemd:
+    name: nvidia-persistenced
+    enabled: true
+    state: started
+  when: not (image_build | default(false))
+
+- name: Reboot into the new driver
+  ansible.builtin.reboot:
+  when: drv_install.changed and not (image_build | default(false))

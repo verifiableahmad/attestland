@@ -1,0 +1,32 @@
+# Slurm {{ slurm_version }} from source (Ubuntu 22.04 ships 21.08). Baked into the GPU image.
+- name: Build dependencies
+  ansible.builtin.apt:
+    name: [libmunge-dev, munge, libpam0g-dev, libhwloc-dev, libjson-c-dev, libhttp-parser-dev,
+           libyaml-dev, libjwt-dev, libdbus-1-dev, libmariadb-dev, libpmix-dev, liblz4-dev,
+           libcurl4-openssl-dev, libreadline-dev, bzip2]
+
+- name: Installed Slurm version
+  ansible.builtin.command: /usr/sbin/slurmd -V
+  register: slurm_v
+  changed_when: false
+  failed_when: false
+
+- name: Build and install
+  when: slurm_v.rc != 0 or slurm_version not in slurm_v.stdout
+  block:
+    - name: Fetch tarball
+      ansible.builtin.unarchive:
+        src: "https://download.schedmd.com/slurm/slurm-{{ slurm_version }}.tar.bz2"
+        dest: /usr/src
+        remote_src: true
+    - name: Configure, make, install
+      ansible.builtin.shell: |
+        set -e
+        cd /usr/src/slurm-{{ slurm_version }}
+        nvml=""; [ -d /usr/local/cuda/include ] && nvml="--with-nvml=/usr/local/cuda"
+        ./configure --prefix=/usr --sysconfdir=/etc/slurm --libdir=/usr/lib/x86_64-linux-gnu \
+          --with-pmix --with-jwt --with-http-parser --with-yaml --with-json --enable-slurmrestd $nvml
+        make -j"$(nproc)"
+        make install
+        ldconfig
+      changed_when: true

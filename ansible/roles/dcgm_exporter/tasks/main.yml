@@ -1,0 +1,17 @@
+# DCGM exporter as a systemd-managed container on every GPU node, so GPU
+# metrics survive moving a node between Slurm and Kubernetes (spec 6.1).
+- name: "Counters CSV (fields healthd needs: XID, ECC, row remap, PCIe replays)"
+  ansible.builtin.copy:
+    src: "{{ playbook_dir }}/../observability/dcgm-counters.csv"
+    dest: /etc/fleet/dcgm-counters.csv
+    mode: "0644"
+
+- name: DCGM exporter service
+  ansible.builtin.include_role:
+    name: podman_service
+  vars:
+    svc_name: dcgm-exporter
+    svc_image: "{{ dcgm_exporter_image }}"
+    svc_gpus: true
+    svc_volumes: ["/etc/fleet/dcgm-counters.csv:/etc/dcgm-exporter/al-counters.csv:ro"]
+    svc_command: "-f /etc/dcgm-exporter/al-counters.csv -a :9400"

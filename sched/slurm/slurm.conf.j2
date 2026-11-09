@@ -1,0 +1,56 @@
+# Managed by Ansible from sched/slurm/slurm.conf.j2.
+ClusterName={{ cluster_name }}
+SlurmctldHost={{ groups['control'][0] }}({{ control_private_ip }})
+SlurmUser={{ slurm_user }}
+
+AuthType=auth/munge
+AuthAltTypes=auth/jwt
+AuthAltParameters=jwt_key=/etc/slurm/jwt_hs256.key
+
+# GPUs and isolation: a job sees only the GPUs it was given (cgroup v2 + ConstrainDevices)
+GresTypes=gpu
+SelectType=select/cons_tres
+SelectTypeParameters=CR_Core_Memory
+ProctrackType=proctrack/cgroup
+TaskPlugin=task/cgroup,task/affinity
+JobAcctGatherType=jobacct_gather/cgroup
+MpiDefault=pmix
+
+# Accounting (slurmdbd + MariaDB on the control VM)
+AccountingStorageType=accounting_storage/slurmdbd
+AccountingStorageHost={{ groups['control'][0] }}
+AccountingStorageTRES=gres/gpu
+JobCompType=jobcomp/none
+
+# Containers: Pyxis + Enroot
+PlugStackConfig=/etc/slurm/plugstack.conf
+
+# Health: fast prolog check, XID epilog report to healthd
+Prolog=/etc/slurm/prolog.sh
+Epilog=/etc/slurm/epilog.sh
+PrologFlags=Alloc,Contain
+
+# Failure handling: requeue on node failure, detect dead nodes in 30 s
+JobRequeue=1
+ReturnToService=1
+SlurmdTimeout=30
+MessageTimeout=20
+KillWait=30
+UnkillableStepTimeout=180
+
+StateSaveLocation=/var/spool/slurmctld
+SlurmdSpoolDir=/var/spool/slurmd
+SlurmctldLogFile=/var/log/slurm/slurmctld.log
+SlurmdLogFile=/var/log/slurm/slurmd.log
+SlurmctldPidFile=/run/slurmctld.pid
+SlurmdPidFile=/run/slurmd.pid
+SchedulerParameters=bf_continue,bf_interval=30
+
+# Placement by physical position (ADR 007): topology.conf is generated from GCE
+# block / sub-block data by fleet/topology/topology.py (ansible role topology).
+TopologyPlugin=topology/tree
+SlurmctldParameters=enable_configless
+
+# g2-standard-8: 8 vCPU (4 cores x 2 threads), 32 GB, 1x L4. Check with `slurmd -C`.
+NodeName={{ groups['gpu'] | join(',') }} CPUs=8 Boards=1 SocketsPerBoard=1 CoresPerSocket=4 ThreadsPerCore=2 RealMemory=30000 Gres=gpu:1 State=UNKNOWN
+PartitionName={{ slurm_partition }} Nodes=ALL Default=YES MaxTime=INFINITE State=UP OverSubscribe=EXCLUSIVE

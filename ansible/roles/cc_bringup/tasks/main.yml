@@ -1,0 +1,10 @@
+- name: Bring-up script
+  ansible.builtin.copy:
+    src: "{{ playbook_dir }}/../receipts/bringup/"
+    dest: /opt/al/bringup/
+    mode: preserve
+- name: Run bring-up (driver, CC mode, attestation tools, GPU ready state, runtime)
+  ansible.builtin.command: "/opt/al/bringup/cc-bringup.sh"
+  environment:
+    VLLM_RECEIPTS_IMAGE: "{{ vllm_receipts_image }}"
+  changed_when: true

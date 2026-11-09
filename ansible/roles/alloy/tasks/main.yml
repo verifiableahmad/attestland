@@ -1,0 +1,20 @@
+# Grafana Alloy: ship journald (kernel XID lines, slurmd, kubelet) and job logs to Loki.
+- name: Alloy config
+  ansible.builtin.template:
+    src: config.alloy.j2
+    dest: /etc/fleet/config.alloy
+    mode: "0644"
+
+- name: Alloy service
+  ansible.builtin.include_role:
+    name: podman_service
+  vars:
+    svc_name: alloy
+    svc_image: "{{ alloy_image }}"
+    svc_volumes:
+      - /etc/fleet/config.alloy:/etc/alloy/config.alloy:ro
+      - /var/log:/var/log:ro
+      - /run/log/journal:/run/log/journal:ro
+      - /etc/machine-id:/etc/machine-id:ro
+      - "{{ scratch_mount }}/logs:/scratch/logs:ro"
+    svc_command: "run /etc/alloy/config.alloy --storage.path=/var/lib/alloy"

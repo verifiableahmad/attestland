@@ -1,0 +1,48 @@
+# make up POOL=gpu: configure control and GPU nodes.
+- name: Base
+  hosts: all
+  become: true
+  roles: [common, node_exporter, alloy, object_store]
+
+- name: GPU software stack (no-op on the Packer image when versions match)
+  hosts: gpu
+  become: true
+  roles: [nvidia_driver, cuda_nccl, container_toolkit, dcgm, scratch, dcgm_exporter, slurm_build, enroot_pyxis, node_agent]
+
+- name: Slurm
+  hosts: control:gpu
+  become: true
+  roles: [slurm_build, slurm_common]
+
+- name: Slurm controller, after its topology.conf (slurm.conf names topology/tree)
+  hosts: control
+  become: true
+  roles: [topology, slurm_controller]
+
+- name: Slurm nodes
+  hosts: gpu
+  become: true
+  roles: [slurm_node]
+
+- name: Kubernetes
+  hosts: control:gpu
+  become: true
+  roles: [k8s_common]
+
+- name: Kubernetes control plane and add-ons
+  hosts: control
+  become: true
+  roles: [k8s_control]
+
+- name: Kubernetes workers
+  hosts: gpu
+  become: true
+  roles: [k8s_worker]
+
+- name: Cluster add-ons, monitoring, healthd, initial pools
+  hosts: control
+  become: true
+  roles: [k8s_addons, monitoring, healthd, initial_pools]
+  tasks:
+    - name: Topology labels for Kueue (ADR 007)
+      ansible.builtin.import_role: {name: topology, tasks_from: labels}

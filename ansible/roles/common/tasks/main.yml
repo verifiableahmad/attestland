@@ -1,0 +1,53 @@
+- name: Base packages
+  ansible.builtin.apt:
+    name: [chrony, jq, curl, fio, iperf3, numactl, pciutils, podman, python3-pip, nvme-cli, mdadm, ethtool, iproute2, build-essential, git]
+    update_cache: true
+    cache_valid_time: 3600
+
+- name: Stop unattended upgrades from moving pinned versions
+  ansible.builtin.apt:
+    name: unattended-upgrades
+    state: absent
+
+- name: Hosts file entries for every node
+  ansible.builtin.lineinfile:
+    path: /etc/hosts
+    regexp: "\\s{{ item }}$"
+    line: "{{ hostvars[item].private_ip }} {{ item }}"
+  loop: "{{ groups['all'] }}"
+  when: hostvars[item].private_ip is defined
+
+- name: Kernel settings for NCCL over TCP and large buffers
+  ansible.posix.sysctl:
+    name: "{{ item.k }}"
+    value: "{{ item.v }}"
+    sysctl_file: /etc/sysctl.d/90-al.conf
+  loop:
+    - {k: net.core.rmem_max, v: "268435456"}
+    - {k: net.core.wmem_max, v: "268435456"}
+    - {k: net.ipv4.tcp_rmem, v: "4096 87380 268435456"}
+    - {k: net.ipv4.tcp_wmem, v: "4096 65536 268435456"}
+    - {k: net.ipv4.tcp_mtu_probing, v: "1"}
+    - {k: vm.max_map_count, v: "1048576"}
+
+- name: Unlimited memlock for RDMA and NCCL
+  ansible.builtin.copy:
+    dest: /etc/security/limits.d/90-al.conf
+    content: |
+      * soft memlock unlimited
+      * hard memlock unlimited
+      * soft nofile 1048576
+      * hard nofile 1048576
+
+- name: Fleet directories
+  ansible.builtin.file:
+    path: "{{ item }}"
+    state: directory
+    mode: "0755"
+  loop: [/opt/al, /opt/al/bin, /var/lib/fleet, /var/lib/fleet/reports, /etc/fleet]
+
+- name: Record node versions file
+  ansible.builtin.copy:
+    src: "{{ playbook_dir }}/../versions.env"
+    dest: /etc/fleet/versions.env
+    mode: "0644"

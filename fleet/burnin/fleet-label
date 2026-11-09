@@ -1,0 +1,29 @@
+#!/usr/bin/env bash
+# fleet-label <node> passed|failed <report.json>
+# Apply a burn-in verdict to both schedulers (spec 1.2):
+#   passed: label fleet.attestland/burnin=passed + report SHA-256, state Ready,
+#           uncordon in Kubernetes, resume in Slurm (only in the node's own pool)
+#   failed: label failed, state Repair, keep it out of both schedulers
+set -euo pipefail
+node=${1:?node} verdict=${2:?passed|failed} report=${3:?report.json}
+sha=$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1]))["sha256"])' "$report")
+pool=$(kubectl get node "$node" -o jsonpath='{.metadata.labels.fleet\.attested/pool}' 2>/dev/null || echo slurm)
+
+if [[ $verdict == passed ]]; then
+  kubectl label node "$node" fleet.attestland/burnin=passed fleet.attestland/state=Ready --overwrite
+  kubectl annotate node "$node" fleet.attestland/burnin-report-sha256="$sha" --overwrite
+  kubectl taint node "$node" fleet.attestland/unhealthy- 2>/dev/null || true
+  if [[ $pool == k8s ]]; then
+    kubectl uncordon "$node"
+  else
+    scontrol update nodename="$node" state=resume 2>/dev/null || true
+  fi
+  echo "$node: burn-in passed ($sha), Ready in pool $pool"
+else
+  kubectl label node "$node" fleet.attestland/burnin=failed fleet.attestland/state=Repair --overwrite
+  kubectl annotate node "$node" fleet.attestland/burnin-report-sha256="$sha" --overwrite
+  kubectl cordon "$node"
+  scontrol update nodename="$node" state=drain reason="burnin:failed:${sha:0:12}"
+  echo "$node: burn-in FAILED ($sha), state Repair"
+  exit 1
+fi

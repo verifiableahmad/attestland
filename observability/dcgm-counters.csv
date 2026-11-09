@@ -1,0 +1,19 @@
+# DCGM exporter fields healthd and the dashboards rely on (spec 1.3, 6.1).
+DCGM_FI_DEV_GPU_UTIL,            gauge,   GPU utilization (%)
+DCGM_FI_DEV_FB_USED,             gauge,   Framebuffer memory used (MiB)
+DCGM_FI_DEV_GPU_TEMP,            gauge,   GPU temperature (C)
+DCGM_FI_DEV_POWER_USAGE,         gauge,   Power draw (W)
+DCGM_FI_DEV_SM_CLOCK,            gauge,   SM clock (MHz)
+DCGM_FI_DEV_CLOCKS_EVENT_REASONS, gauge,  Clock throttle reasons bitmask
+DCGM_FI_DEV_XID_ERRORS,          gauge,   Value of the last XID error
+DCGM_FI_DEV_ECC_SBE_VOL_TOTAL,   counter, Single-bit volatile ECC errors
+DCGM_FI_DEV_ECC_DBE_VOL_TOTAL,   counter, Double-bit volatile ECC errors
+DCGM_FI_DEV_ROW_REMAP_FAILURE,   gauge,   Row remapping failed
+DCGM_FI_DEV_ROW_REMAP_PENDING,   gauge,   Row remapping pending
+DCGM_FI_DEV_UNCORRECTABLE_REMAPPED_ROWS, counter, Rows remapped for uncorrectable errors
+DCGM_FI_DEV_PCIE_REPLAY_COUNTER, counter, PCIe replay count
+DCGM_FI_PROF_GR_ENGINE_ACTIVE,   gauge,   Graphics engine active ratio
+DCGM_FI_PROF_PIPE_TENSOR_ACTIVE, gauge,   Tensor pipe active ratio
+DCGM_FI_PROF_DRAM_ACTIVE,        gauge,   Memory interface active ratio
+DCGM_FI_PROF_PCIE_TX_BYTES,      gauge,   PCIe TX bytes/s
+DCGM_FI_PROF_PCIE_RX_BYTES,      gauge,   PCIe RX bytes/s
