@@ -15,7 +15,7 @@ tags, so the 8-hour reaper deletes it.
 
 ## Context
 
-The SR Linux fabric and the L3 VNI test need a real Linux kernel (ADR 004), and
+The SONiC fabric (amd64 only) and the L3 VNI test need a real x86 Linux kernel (ADR 004, ADR 012), and
 the provisioning simulation needs `/dev/kvm` (external-deps item 4). The Mac
 has neither.
 

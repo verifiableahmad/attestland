@@ -1,0 +1,151 @@
+{
+  "DSCP_TO_TC_MAP": {
+    "ROCE": {
+      "0": "0",
+      "1": "0",
+      "2": "0",
+      "3": "0",
+      "4": "0",
+      "5": "0",
+      "6": "0",
+      "7": "0",
+      "8": "0",
+      "9": "0",
+      "10": "0",
+      "11": "0",
+      "12": "0",
+      "13": "0",
+      "14": "0",
+      "15": "0",
+      "16": "0",
+      "17": "0",
+      "18": "0",
+      "19": "0",
+      "20": "0",
+      "21": "0",
+      "22": "0",
+      "23": "0",
+      "24": "0",
+      "25": "0",
+      "26": "3",
+      "27": "0",
+      "28": "0",
+      "29": "0",
+      "30": "0",
+      "31": "0",
+      "32": "0",
+      "33": "0",
+      "34": "0",
+      "35": "0",
+      "36": "0",
+      "37": "0",
+      "38": "0",
+      "39": "0",
+      "40": "0",
+      "41": "0",
+      "42": "0",
+      "43": "0",
+      "44": "0",
+      "45": "0",
+      "46": "0",
+      "47": "0",
+      "48": "6",
+      "49": "0",
+      "50": "0",
+      "51": "0",
+      "52": "0",
+      "53": "0",
+      "54": "0",
+      "55": "0",
+      "56": "0",
+      "57": "0",
+      "58": "0",
+      "59": "0",
+      "60": "0",
+      "61": "0",
+      "62": "0",
+      "63": "0"
+    }
+  },
+  "TC_TO_QUEUE_MAP": {
+    "ROCE": {
+      "0": "0",
+      "3": "3",
+      "6": "6"
+    }
+  },
+  "TC_TO_PRIORITY_GROUP_MAP": {
+    "ROCE": {
+      "0": "0",
+      "3": "3",
+      "6": "0"
+    }
+  },
+  "MAP_PFC_PRIORITY_TO_QUEUE": {
+    "ROCE": {
+      "3": "3"
+    }
+  },
+  "PORT_QOS_MAP": {
+    "Ethernet0": {
+      "dscp_to_tc_map": "ROCE",
+      "tc_to_queue_map": "ROCE",
+      "tc_to_pg_map": "ROCE",
+      "pfc_to_queue_map": "ROCE",
+      "pfc_enable": "3",
+      "pfcwd_sw_enable": "3"
+    }
+  },
+  "WRED_PROFILE": {
+    "ROCE_ECN": {
+      "wred_green_enable": "true",
+      "green_min_threshold": "153600",
+      "green_max_threshold": "1536000",
+      "green_drop_probability": "10",
+      "wred_yellow_enable": "true",
+      "yellow_min_threshold": "153600",
+      "yellow_max_threshold": "1536000",
+      "yellow_drop_probability": "10",
+      "wred_red_enable": "true",
+      "red_min_threshold": "153600",
+      "red_max_threshold": "1536000",
+      "red_drop_probability": "10",
+      "ecn": "ecn_all"
+    }
+  },
+  "SCHEDULER": {
+    "SCHED_BE": {
+      "type": "DWRR",
+      "weight": "5"
+    },
+    "SCHED_ROCE": {
+      "type": "DWRR",
+      "weight": "95"
+    },
+    "SCHED_CNP": {
+      "type": "STRICT"
+    }
+  },
+  "QUEUE": {
+    "Ethernet0|0": {
+      "scheduler": "SCHED_BE"
+    },
+    "Ethernet0|3": {
+      "scheduler": "SCHED_ROCE",
+      "wred_profile": "ROCE_ECN"
+    },
+    "Ethernet0|6": {
+      "scheduler": "SCHED_CNP"
+    }
+  },
+  "PFC_WD": {
+    "Ethernet0": {
+      "action": "drop",
+      "detection_time": "200",
+      "restoration_time": "400"
+    },
+    "GLOBAL": {
+      "POLL_INTERVAL": "100"
+    }
+  }
+}

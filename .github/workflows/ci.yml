@@ -20,14 +20,15 @@ jobs:
       - run: pip install -r requirements-dev.txt
       - run: python -m pytest -q bench workloads storage chaos fleet sched network/containerlab/tests/test_gen.py
   lab:
-    # SR Linux on a real Linux runner (the spec's default NOS).
+    # SONiC (docker-sonic-vs, amd64 only) on a real Linux runner: the lab's default NOS (ADR 012).
     runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
         with: {python-version: "3.12"}
       - run: pip install -r requirements-dev.txt
-      - run: bash -c "$(curl -sL https://get.containerlab.dev)" -- -v 0.70.2
+      - run: source versions.env && bash -c "$(curl -sL https://get.containerlab.dev)" -- -v "$CONTAINERLAB_VERSION"
+      - run: make lab-image
       - run: make lab-up PY=python && make lab-test PY=python
   infra:
     runs-on: ubuntu-24.04

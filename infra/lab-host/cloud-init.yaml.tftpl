@@ -26,7 +26,7 @@ packages:
   - python3-venv
   - python3-pip
 
-# containerlab runs many SR Linux and FRR containers; raise the inotify limits.
+# containerlab runs many SONiC and FRR containers; raise the inotify limits.
 write_files:
   - path: /etc/sysctl.d/90-al-lab.conf
     content: |

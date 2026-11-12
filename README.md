@@ -43,9 +43,10 @@ make lab-up LAB_NOS=frr && make lab-test LAB_NOS=frr; make lab-down LAB_NOS=frr
 make receipts                   # builds bin/alissue, bin/alverify (+ linux-amd64 issuer)
 ```
 
-On a Linux host, `make lab-up` (default `LAB_NOS=srl`) runs the spec's SR Linux
-fabric. Without one, `make lab-host-up` creates an AWS bare-metal host for it
-(ADR 011, ~$4.08/h).
+On an x86 Linux host, `make lab-up` (default `LAB_NOS=sonic`) downloads
+docker-sonic-vs once (`make lab-image`) and runs the SONiC fabric (ADR 012).
+Without one, `make lab-host-up` creates an AWS bare-metal host for it
+(ADR 011, ~$4.08/h); the CI `lab` job also runs it.
 
 ## Entry points
 

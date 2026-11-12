@@ -10,13 +10,35 @@
     deb: https://developer.download.nvidia.com/compute/cuda/repos/ubuntu2204/x86_64/cuda-keyring_1.1-1_all.deb
   when: drv.rc != 0 or (drv.stdout_lines | first | default('')) != nvidia_driver_version
 
+# Pinning only the metapackage is not enough: its exact-version dependencies
+# (libnvidia-compute-580, nvidia-dkms-580-open, ...) would resolve to the newest
+# 580 and conflict. A version pin needs package patterns, not "Package: *".
+- name: Pin every driver-branch package to the pinned version
+  ansible.builtin.copy:
+    dest: /etc/apt/preferences.d/nvidia-driver
+    mode: "0644"
+    content: |
+      Package: *-{{ nvidia_driver_branch }} *-{{ nvidia_driver_branch }}-open
+      Pin: version {{ nvidia_driver_version }}-{{ nvidia_driver_pkg_rev }}
+      Pin-Priority: 1001
+
+# The 6.8 (HWE) kernel on the AWS jammy image is built with gcc-12; DKMS uses the
+# compiler named in the kernel config when it is installed and otherwise gcc-11,
+# which rejects the kernel's flags (-ftrivial-auto-var-init=zero).
+- name: Compiler the kernel was built with
+  ansible.builtin.apt:
+    name: gcc-12
+  when: drv.rc != 0 or (drv.stdout_lines | first | default('')) != nvidia_driver_version
+
+# No fabric manager: it is only for NVSwitch systems, and every pool is single-GPU (L4, H100 NVL).
 - name: Install pinned open-kernel driver
   ansible.builtin.apt:
     name:
-      - "nvidia-driver-{{ nvidia_driver_branch }}-open={{ nvidia_driver_version }}-0ubuntu1"
-      - "nvidia-fabricmanager-{{ nvidia_driver_branch }}={{ nvidia_driver_version }}-1"
+      - "nvidia-driver-{{ nvidia_driver_branch }}-open={{ nvidia_driver_version }}-{{ nvidia_driver_pkg_rev }}"
+    install_recommends: false
     update_cache: true
     allow_downgrade: true
+    allow_change_held_packages: true
   when: drv.rc != 0 or (drv.stdout_lines | first | default('')) != nvidia_driver_version
   register: drv_install
 

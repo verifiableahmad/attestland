@@ -47,10 +47,23 @@ provider "github" {
   owner = split("/", var.github_repo)[0]
 }
 
+# Numeric ids for the immutable `sub` format (owner@id/repo@id), which this
+# repository's OIDC settings use (gh api repos/<repo>/actions/oidc/customization/sub).
+data "github_repository" "this" {
+  full_name = var.github_repo
+}
+
+data "github_user" "owner" {
+  username = split("/", var.github_repo)[0]
+}
+
 locals {
   github_issuer = "https://token.actions.githubusercontent.com"
   # The `sub` claim of a job on that branch with no environment.
-  github_subject = "repo:${var.github_repo}:ref:refs/heads/${var.github_branch}"
+  github_subject = format("repo:%s@%s/%s@%s:ref:refs/heads/%s",
+    data.github_user.owner.login, data.github_user.owner.id,
+    data.github_repository.this.name, data.github_repository.this.repo_id,
+    var.github_branch)
 }
 
 # --- AWS: OIDC provider and role --------------------------------------------

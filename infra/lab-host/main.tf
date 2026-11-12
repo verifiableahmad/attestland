@@ -1,5 +1,5 @@
 # Lab host (phase 1, ADR 011): one c5.metal running Ubuntu 22.04 on the bare
-# hardware, for the SR Linux fabric (make lab-up) and the provisioning
+# hardware, for the SONiC fabric (make lab-up) and the provisioning
 # simulation (make provision), which needs /dev/kvm. Its own small VPC, so it
 # comes and goes without the GPU pool. Tagged for the 8-hour reaper.
 terraform {

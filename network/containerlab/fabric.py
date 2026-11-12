@@ -1,7 +1,9 @@
 """Single source of truth for the lab fabric: names, ASNs, links and addresses.
 
-gen.py renders SR Linux configs and the containerlab topology from this model;
-the tests read it to know what to expect.
+gen.py renders the SONiC and FRR configs and the containerlab topologies from
+this model; the tests read it to know what to expect. Ports are the containerlab
+wire names (eth1, eth2, ...); gen_sonic.sonic_port maps them to SONiC's
+Ethernet0, Ethernet4, ...
 """
 
 from __future__ import annotations
@@ -11,10 +13,12 @@ from ipaddress import IPv4Interface
 
 SPINE_ASN = 65100
 LEAF_ASN_BASE = 65100          # leaf n gets 65100 + n
-OVERLAY_ASN = 65500            # iBGP EVPN, spines are route reflectors
+OVERLAY_ASN = 65500            # EVPN route targets (EVPN rides the eBGP underlay sessions)
 N_SPINES = 2
 N_LEAVES = 4
-UPLINK_PORT_BASE = 49          # leaf ethernet-1/49, 1/50 go to spines
+# Leaf eth3, eth4 go to the spines. docker-sonic-vs creates a front-panel port
+# only for each ethN it finds at boot, so the lab keeps port numbers contiguous.
+UPLINK_PORT_BASE = 3
 
 
 @dataclass(frozen=True)
@@ -99,21 +103,20 @@ def build() -> Fabric:
     for s, spine in enumerate(spines, 1):
         for l, leaf in enumerate(leaves, 1):
             s_ip, l_ip = p2p(s, l)
-            s_port = f"ethernet-1/{l}"
-            l_port = f"ethernet-1/{UPLINK_PORT_BASE + s - 1}"
+            s_port = f"eth{l}"
+            l_port = f"eth{UPLINK_PORT_BASE + s - 1}"
             spine.ifaces[s_port] = str(s_ip)
             leaf.ifaces[l_port] = str(l_ip)
             spine.bgp_neighbors.append((str(l_ip.ip), leaf.asn))
             leaf.bgp_neighbors.append((str(s_ip.ip), spine.asn))
-            links.append((f"{spine.name}:e1-{l}",
-                          f"{leaf.name}:e1-{UPLINK_PORT_BASE + s - 1}"))
+            links.append((f"{spine.name}:{s_port}", f"{leaf.name}:{l_port}"))
     hosts: list[Host] = []
     for l, leaf in enumerate(leaves, 1):
         for t in TENANTS:
             h = Host(f"h{len(hosts) + 1}", leaf.name, t.host_port, t,
                      f"{t.subnet_prefix}.{10 + l}/24")
             hosts.append(h)
-            links.append((f"{h.name}:eth1", f"{leaf.name}:e1-{t.host_port}"))
+            links.append((f"{h.name}:eth1", f"{leaf.name}:eth{t.host_port}"))
     return Fabric(spines, leaves, hosts, links)
 
 
@@ -137,11 +140,11 @@ def rail_build() -> dict:
     for s, sp in enumerate(spines, 1):
         for r, lf in enumerate(leaves, 1):
             base = 2 * (r - 1)
-            sp["ifaces"][f"ethernet-1/{r}"] = f"10.11.{s}.{base}/31"
-            lf["ifaces"][f"ethernet-1/{UPLINK_PORT_BASE + s - 1}"] = f"10.11.{s}.{base + 1}/31"
+            sp["ifaces"][f"eth{r}"] = f"10.11.{s}.{base}/31"
+            lf["ifaces"][f"eth{UPLINK_PORT_BASE + s - 1}"] = f"10.11.{s}.{base + 1}/31"
             sp["neighbors"].append((f"10.11.{s}.{base + 1}", lf["asn"]))
             lf["neighbors"].append((f"10.11.{s}.{base}", sp["asn"]))
-            links.append((f"{sp['name']}:e1-{r}", f"{lf['name']}:e1-{UPLINK_PORT_BASE + s - 1}"))
+            links.append((f"{sp['name']}:eth{r}", f"{lf['name']}:eth{UPLINK_PORT_BASE + s - 1}"))
     # One container per GPU node; its eth<r> is the backend NIC of GPU r.
     for n in range(1, RAIL_NODES + 1):
         node = {"name": f"gpunode{n}", "nics": []}
@@ -149,9 +152,9 @@ def rail_build() -> dict:
             port = n
             leaf_ip = f"10.12.{r}.{2 * (n - 1)}/31"
             gpu_ip = f"10.12.{r}.{2 * (n - 1) + 1}/31"
-            lf["ifaces"][f"ethernet-1/{port}"] = leaf_ip
+            lf["ifaces"][f"eth{port}"] = leaf_ip
             node["nics"].append({"iface": f"eth{r}", "rail": r, "leaf": lf["name"],
                                  "address": gpu_ip, "gateway": leaf_ip.split("/")[0]})
-            links.append((f"{node['name']}:eth{r}", f"{lf['name']}:e1-{port}"))
+            links.append((f"{node['name']}:eth{r}", f"{lf['name']}:eth{port}"))
         gpus.append(node)
     return {"spines": spines, "leaves": leaves, "nodes": gpus, "links": links}

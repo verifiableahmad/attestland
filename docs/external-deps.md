@@ -4,14 +4,14 @@ Snapshot of 2026-11-10.
 
 ## External dependencies
 
-21 external dependencies stand between the repo and measured results: 2 are fully in place, 12 are partly in place and 7 are missing. The twin's SKU access (row 20) and MAA carrying our nonce (row 2) decide the rest of Phase 5. Rows 5, 6 and 20 need your accounts, so they can't be done from here.
+22 external dependencies stand between the repo and measured results: 2 are fully in place, 13 are partly in place and 7 are missing. The twin's SKU access (row 20) and MAA carrying our nonce (row 2) decide the rest of Phase 5. Rows 5, 6 and 20 need your accounts, so they can't be done from here.
 
 | # | Dependency | Needed for | Status | Already there | Missing / action |
 | --- | --- | --- | --- | --- | --- |
 | 1 | Azure quota for `Standard_NCC40ads_H100_v5` (`StandardNCCads2023Family` ≥ 40 vCPUs) in eastus2 | Phase 5: confidential H100 | In place | Granted 2026-11-10 (support request 2611100050001296): 40 vCPUs, regional vCPUs 88; `infra/cc-pool` (validated) | - |
 | 2 | Microsoft Azure Attestation token for the SEV-SNP CVM, carrying our nonce, from Azure's guest `AttestationClient` | Phase 5: CPU attestation | Partly in place | MAA collector (the sample app's `-a -n -o token` flags), verifier and policy, tested on the test platform; bring-up builds the client from source and checks the nonce is in the token | Confirm the client's build steps and flags on the CVM image, and the claim names (`x-ms-runtime.client-payload.nonce`, launch measurement) on the first token |
 | 3 | AWS on-demand G and VT vCPU quota in us-east-1, and g6.2xlarge capacity | Phases 2–4 | In place | 384 vCPUs on-demand (2026-11-10); a test g6.2xlarge ran in us-east-1a; `infra/gpu-pool` (validated) | Spot quota is 0 (optional request); us-east-1b had no capacity that day, so set `az` per run |
-| 4 | Linux host with KVM and Docker | 1.1 provisioning sim; SR Linux lab; L3 VNIs | Partly in place | Scripts, CI job `lab` on an Ubuntu runner, and `infra/lab-host` (AWS c5.metal, ADR 011) | Standard on-demand vCPU quota ≥ 96 in us-east-1; a first `make lab-host-up`. This Mac's Docker kernel crashes SR Linux and lacks VRF |
+| 4 | x86 Linux host with KVM and Docker | 1.1 provisioning sim; SONiC lab; L3 VNIs | Partly in place | Scripts, CI job `lab` on an Ubuntu runner, and `infra/lab-host` (AWS c5.metal, ADR 011) | Standard on-demand vCPU quota ≥ 96 in us-east-1; a first `make lab-host-up`. This Mac is arm64 (no docker-sonic-vs build) and its Docker kernel lacks VRF |
 | 5 | GitHub repository with Actions and GHCR | 7.4 signed images; CI; reaper | Partly in place | `.github/workflows` (images, ci, reaper) | Create the remote and push; replace `REPLACE-OWNER` in the policy and Dockerfile |
 | 6 | Cloud credentials for GitHub Actions (AWS OIDC role, Azure federated identity) | 8-hour reaper | Partly in place | `infra/reaper/reap.sh` (AWS and Azure passes), workflow; `infra/reaper/*.tf` creates both identities and the repo variables | `make reaper-up` (runbook); push the AWS/Azure workflow to `main`, which still runs the GCP pass |
 | 7 | Sigstore public good (Fulcio, Rekor) and a pinned `trusted_root.json` | Image check in `alverify` | Partly in place | sigstore-go verification, tested with a virtual Sigstore | Run `cosign trusted-root create` (or TUF fetch) into `receipts/policy/prod/` |
@@ -29,6 +29,7 @@ Snapshot of 2026-11-10.
 | 19 | Tinkerbell stack chart, sushy-tools, Ubuntu cloud image | 1.1 provisioning | Partly in place | Values, template, hardware objects | Validate chart version and values on the KVM host |
 | 20 | Azure region/SKU access to `Standard_NC40ads_H100_v5` (the non-CC twin) and its quota | 7.7 overhead benchmark | Missing | `create_twin` in `infra/cc-pool` | `NotAvailableForSubscription` in eastus2, centralus and westeurope (2026-11-10); file a region/SKU access request, then `StandardNCadsH100v5Family` ≥ 40 |
 | 21 | EC2 instance topology for the GPU instance type | Topology-aware placement (ADR 007) | Missing | Cluster placement group on on-demand runs; topology role reads `DescribeInstanceTopology` | Not offered for g6.2xlarge (empty result on a running instance); only a larger type would give position data |
+| 22 | `docker-sonic-vs` image (SONiC `vs` build artifact, branch 202511) | 2.1 SONiC lab (ADR 012) | Partly in place | `make lab-image` downloads the branch's latest build from sonic-build.azurewebsites.net and loads it | Not on a registry and only the latest build is served: pin `SONIC_VS_SHA256` from the first download; first SONiC lab run on Linux |
 
 ## Assumptions
 
@@ -54,7 +55,7 @@ I made 28 assumptions where the spec left a choice open or a vendor detail could
 | 16 | CC bring-up | Azure turns GPU CC mode on for NCC H100 v5 and the guest only sets the ready state; `nvidia-smi conf-compute -f`, `-srs 1`, `-grs` flags; driver package names | `cc-bringup.sh` | Azure confidential GPU guide on the VM |
 | 17 | Nonce encoding | Raw 32-byte hashes concatenated with the key's DER SPKI, attested after the job | `receipt.go`, ADR 003 | - |
 | 18 | Image proof | The receipt carries the image's SLSA provenance bundle (GitHub `attest-build-provenance`), checked against `images.yml@refs/heads/main` | `.github/workflows/images.yml`, prod policy | First signed build |
-| 19 | Lab hosts | `nicolaka/netshoot:v0.14` hosts; SR Linux `ixrd2l` type for 49/50 uplink ports | `fabric.clab.yml` | Linux-host run |
+| 19 | Lab switches and hosts | `nicolaka/netshoot:v0.14` hosts; docker-sonic-vs maps `ethN` to `Ethernet{4(N-1)}` and creates ports only for links present (contiguous eth1-eth4); its click CLI (`config vxlan`, `config vrf add_vrf_vni_map`, `config neigh-suppress`) matches the EVPN HLD; `/usr/lib/frr/bfdd` exists in the image | `gen_sonic.py`, `fabric.clab.yml` | First SONiC run on Linux |
 | 20 | On-demand | Both Azure VMs and every AWS VM run on-demand (AWS Spot quota is 0; Azure NCC is on-demand) | `infra/*` | - |
 | 21 | Quota names | `StandardNCCads2023Family` covers `Standard_NCC40ads_H100_v5`; `StandardNCadsH100v5Family` covers the twin | runbook, Phase 1 | `az vm list-usage --location eastus2` (confirmed for the first) |
 | 22 | GPU tool on Azure | NVIDIA's `nvattest` with NRAS works on Azure's NCC H100 v5 | `evidence.go` | First CC VM |

@@ -1,11 +1,15 @@
-"""FRR fallback renderer (spec 2.1: "FRR as a fallback").
+"""FRR renderer: the laptop fallback, and the routing sections SONiC reuses.
 
-Same fabric model as the SR Linux configs: eBGP underlay with BFD and ECMP,
-BGP EVPN with VXLAN, two tenants with an L2 VNI and an L3 VNI each. The data
-plane is the Linux kernel, so net.sh builds the bridges, VXLAN devices and
-VRFs. On kernels without VRF support (Docker Desktop's LinuxKit kernel) net.sh
-skips the L3 VNI and the tenant gateways, which keeps tenants isolated but
-leaves no type-5 routes; the lab tests report that as a skip with the reason.
+Same fabric model as the SONiC configs: eBGP underlay with BFD and ECMP,
+BGP EVPN with VXLAN, two tenants with an L2 VNI and an L3 VNI each. SONiC's
+routing stack is FRR, so gen_sonic.py applies spine_bgp/leaf_bgp unchanged
+through vtysh; here they sit in a full frr.conf on a plain FRR container.
+
+The FRR data plane is the Linux kernel, so net.sh builds the bridges, VXLAN
+devices and VRFs. On kernels without VRF support (Docker Desktop's LinuxKit
+kernel) net.sh skips the L3 VNI and the tenant gateways, which keeps tenants
+isolated but leaves no type-5 routes; the lab tests report that as a skip
+with the reason.
 """
 
 from __future__ import annotations
@@ -44,25 +48,29 @@ staticd_options="-A 127.0.0.1"
 """
 
 
-def _port(srl_port: str) -> str:
-    """ethernet-1/49 -> eth49 (containerlab linux-kind interface names)."""
-    return "eth" + srl_port.split("/")[1]
+def vrf_name(t: fabric.Tenant) -> str:
+    return f"vrf-{t.name}"
+
+
+BFD_PROFILE = ["bfd", " profile fast", "  transmit-interval 100", "  receive-interval 100",
+               "  detect-multiplier 3", " exit", "exit", "!"]
 
 
 def _common(node: fabric.Node) -> list[str]:
+    """frr.conf header and addressing; on SONiC the addresses come from `config`."""
     lines = ["frr defaults datacenter", f"hostname {node.name}",
              "log stdout informational", "service integrated-vtysh-config", "!",
-             "bfd", " profile fast", "  transmit-interval 100", "  receive-interval 100",
-             "  detect-multiplier 3", " exit", "exit", "!",
              "interface lo", f" ip address {node.loopback}", "exit", "!"]
     for port, addr in node.ifaces.items():
-        lines += [f"interface {_port(port)}", f" ip address {addr}", "exit", "!"]
+        lines += [f"interface {port}", f" ip address {addr}", "exit", "!"]
     return lines
 
 
-def _bgp_head(node: fabric.Node, group: str) -> list[str]:
-    lo = node.loopback.split("/")[0]
-    lines = [f"router bgp {node.asn}",
+def bgp_head(asn: int, loopback: str, neighbors, group: str,
+             networks: list[str] = ()) -> list[str]:
+    """eBGP underlay: one peer group, BFD, ECMP across ASNs, the loopback (and networks) advertised."""
+    lo = loopback.split("/")[0]
+    lines = [f"router bgp {asn}",
              f" bgp router-id {lo}",
              " no bgp ebgp-requires-policy",
              " no bgp default ipv4-unicast",
@@ -72,31 +80,34 @@ def _bgp_head(node: fabric.Node, group: str) -> list[str]:
              f" neighbor {group} bfd profile fast",
              f" neighbor {group} timers 3 9",
              f" neighbor {group} timers connect 2"]
-    for peer, _ in node.bgp_neighbors:
+    for peer, _ in neighbors:
         lines.append(f" neighbor {peer} peer-group {group}")
     lines += [" !", " address-family ipv4 unicast",
-              f"  network {node.loopback}",
-              f"  neighbor {group} activate",
+              f"  network {loopback}"]
+    lines += [f"  network {n}" for n in networks]
+    lines += [f"  neighbor {group} activate",
               "  maximum-paths 8",
               " exit-address-family"]
     return lines
 
 
-def render_spine(node: fabric.Node) -> str:
-    lines = _common(node) + _bgp_head(node, "LEAVES")
+def spine_bgp(node: fabric.Node) -> list[str]:
+    """Spine routing: underlay plus EVPN transit (next hop kept, so VTEPs talk directly)."""
+    lines = BFD_PROFILE + bgp_head(node.asn, node.loopback, node.bgp_neighbors, "LEAVES")
     lines += [" address-family l2vpn evpn",
               "  neighbor LEAVES activate",
               "  neighbor LEAVES attribute-unchanged next-hop",
               " exit-address-family", "exit", "!"]
-    return "\n".join(lines) + "\n"
+    return lines
 
 
-def render_leaf(node: fabric.Node) -> str:
+def leaf_bgp(node: fabric.Node, vrf=vrf_name) -> list[str]:
+    """Leaf routing: underlay, EVPN with fixed route targets, one BGP VRF per tenant L3 VNI."""
     rt = fabric.OVERLAY_ASN
-    lines = _common(node)
+    lines = list(BFD_PROFILE)
     for t in fabric.TENANTS:
-        lines += [f"vrf vrf-{t.name}", f" vni {t.l3_vni}", "exit-vrf", "!"]
-    lines += _bgp_head(node, "SPINES")
+        lines += [f"vrf {vrf(t)}", f" vni {t.l3_vni}", "exit-vrf", "!"]
+    lines += bgp_head(node.asn, node.loopback, node.bgp_neighbors, "SPINES")
     lines += [" address-family l2vpn evpn",
               "  neighbor SPINES activate",
               "  advertise-all-vni"]
@@ -107,7 +118,7 @@ def render_leaf(node: fabric.Node) -> str:
                   "  exit-vni"]
     lines += [" exit-address-family", "exit", "!"]
     for t in fabric.TENANTS:
-        lines += [f"router bgp {node.asn} vrf vrf-{t.name}",
+        lines += [f"router bgp {node.asn} vrf {vrf(t)}",
                   f" bgp router-id {node.loopback.split('/')[0]}",
                   " address-family ipv4 unicast", "  redistribute connected",
                   " exit-address-family",
@@ -115,7 +126,15 @@ def render_leaf(node: fabric.Node) -> str:
                   f"  route-target import {rt}:{t.l3_vni}",
                   f"  route-target export {rt}:{t.l3_vni}",
                   " exit-address-family", "exit", "!"]
-    return "\n".join(lines) + "\n"
+    return lines
+
+
+def render_spine(node: fabric.Node) -> str:
+    return "\n".join(_common(node) + spine_bgp(node)) + "\n"
+
+
+def render_leaf(node: fabric.Node) -> str:
+    return "\n".join(_common(node) + leaf_bgp(node)) + "\n"
 
 
 def render_leaf_net(node: fabric.Node) -> str:
@@ -155,7 +174,7 @@ def render_leaf_net(node: fabric.Node) -> str:
 
 
 def render_topology(fab: fabric.Fabric, v: dict[str, str]) -> str:
-    out = ["# Generated by gen.py (FRR fallback). Do not edit by hand.",
+    out = ["# Generated by gen.py (FRR, laptop fallback). Do not edit by hand.",
            "name: al-fabric",
            "mgmt:", "  network: al-fabric-mgmt", "  ipv4-subnet: 172.30.30.0/24",
            "topology:", "  kinds:", "    linux:", f"      image: {v['LAB_HOST_IMAGE']}",
@@ -181,8 +200,6 @@ def render_topology(fab: fabric.Fabric, v: dict[str, str]) -> str:
                 f"        - ip route add 172.16.0.0/16 via {gw} dev eth1"]
     out.append("  links:")
     for a, b in fab.links:
-        a = a.replace(":e1-", ":eth")
-        b = b.replace(":e1-", ":eth")
         out.append(f"    - endpoints: [\"{a}\", \"{b}\"]")
     return "\n".join(out) + "\n"
 

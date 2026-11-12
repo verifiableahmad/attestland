@@ -23,7 +23,7 @@ log "1. CC-capable NVIDIA driver (open kernel modules), persistence mode"
 apt-get install -y "linux-modules-extra-$(uname -r)" build-essential
 curl -fsSLo /tmp/cuda-keyring.deb https://developer.download.nvidia.com/compute/cuda/repos/ubuntu2204/x86_64/cuda-keyring_1.1-1_all.deb
 dpkg -i /tmp/cuda-keyring.deb && apt-get update
-apt-get install -y "nvidia-driver-${NVIDIA_DRIVER_BRANCH}-open=${NVIDIA_DRIVER_VERSION}-0ubuntu1" "cuda-toolkit-${CUDA_VERSION%.*}" || \
+apt-get install -y "nvidia-driver-${NVIDIA_DRIVER_BRANCH}-open=${NVIDIA_DRIVER_VERSION}-${NVIDIA_DRIVER_PKG_REV}" "cuda-toolkit-${CUDA_VERSION%.*}" || \
   apt-get install -y "nvidia-open-${NVIDIA_DRIVER_BRANCH}"
 nvidia-persistenced --uvm-persistence-mode || true
 systemctl enable --now nvidia-persistenced
