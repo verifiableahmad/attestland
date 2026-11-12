@@ -42,7 +42,7 @@ const (
 
 // NewTestPlatform creates fresh keys, or loads them from dir if present.
 func NewTestPlatform(dir string) (*TestPlatform, error) {
-	t := &TestPlatform{LaunchMeasurement: "a1b2c3" + strings.Repeat("0", 90), Driver: "580.82.07",
+	t := &TestPlatform{LaunchMeasurement: "a1b2c3" + strings.Repeat("0", 90), Driver: "580.196.07",
 		VBIOS: "96.00.9F.00.04", Now: time.Now}
 	if dir != "" {
 		if err := t.load(dir); err == nil {

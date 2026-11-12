@@ -13,11 +13,13 @@ the Phase 1 quota requests first; they are the longest lead-time items.
    quota above 0 usually needs a portal support request; the free support plan
    cannot open one from the CLI.
 2. `make test` - Go and Python tests.
-3. Linux host: `make lab-up && make lab-test` (SR Linux). No Linux machine:
+3. x86 Linux host: `make lab-up && make lab-test` (SONiC, ADR 012; the first run
+   downloads docker-sonic-vs and prints its sha256: pin it as `SONIC_VS_SHA256`
+   in `versions.env`). No Linux machine:
    `make lab-host-up` creates an AWS c5.metal (ADR 011, ~$4.08/h, needs
    standard on-demand vCPU quota ≥ 96), then `make lab-host-ssh` and run steps
-   3 and 4 in `~/attestland`; `make lab-host-down` when done. Laptop:
-   `make lab-up LAB_NOS=frr && make lab-test LAB_NOS=frr`.
+   3 and 4 in `~/attestland`; `make lab-host-down` when done. Laptop (FRR, no
+   type-5 test): `make lab-up LAB_NOS=frr && make lab-test LAB_NOS=frr`.
    Leaves `bench/results/net/convergence-*.json`.
 4. Linux/KVM host: `make provision N=3` → `bench/results/fleet/provision-*.json`.
 5. Read `network/design-note.md`; rerun `network/sizing.py` if inputs change.
@@ -29,7 +31,31 @@ the Phase 1 quota requests first; they are the longest lead-time items.
    VM resource (Azure) create the `al` user with it.
 2. AWS credentials: an IAM user or SSO role with EC2, VPC, S3, IAM (roles and
    instance profiles) and Budgets rights; not the account root user.
-   `aws sts get-caller-identity` shows which identity the CLI uses.
+   `aws sts get-caller-identity` shows which identity the CLI uses. To create an
+   IAM user `al-operator` with those rights, run this once with the root (or an
+   admin) credentials:
+
+   ```sh
+   aws iam create-user --user-name al-operator --tags Key=project,Value=attestland
+   # EC2 covers VPC; IAM covers roles, instance profiles and the reaper's OIDC
+   # provider; CloudTrail read is for diagnosing RunInstances errors.
+   for p in AmazonEC2FullAccess AmazonS3FullAccess IAMFullAccess AWSCloudTrail_ReadOnlyAccess; do
+     aws iam attach-user-policy --user-name al-operator \
+       --policy-arn "arn:aws:iam::aws:policy/$p"
+   done
+   aws iam put-user-policy --user-name al-operator --policy-name budgets \
+     --policy-document '{"Version":"2012-10-17","Statement":[{"Effect":"Allow","Action":"budgets:*","Resource":"*"}]}'
+   aws iam create-access-key --user-name al-operator \
+     --query 'AccessKey.[AccessKeyId,SecretAccessKey]' --output text |
+     { read -r id secret
+       aws configure set aws_access_key_id "$id" --profile attestland
+       aws configure set aws_secret_access_key "$secret" --profile attestland; }
+   aws configure set region us-east-1 --profile attestland
+   export AWS_PROFILE=attestland   # add to your shell profile
+   aws sts get-caller-identity     # Arn must end in :user/al-operator
+   ```
+
+   Then delete the root user's access key (console → Security credentials).
 3. AWS budget: activate `project` as a cost allocation tag (Billing → Cost
    allocation tags) or the budget's tag filter matches nothing.
 4. Azure: `az login --use-device-code`. If it finds no subscriptions, the
@@ -55,8 +81,22 @@ the Phase 1 quota requests first; they are the longest lead-time items.
 
 1. `cp infra/gpu-pool/terraform.tfvars.example infra/gpu-pool/terraform.tfvars`, fill it.
 2. Export secrets: `AL_MUNGE_KEY_B64`, `AL_SLURM_JWT_KEY_B64`,
-   `AL_GRAFANA_PASSWORD`, optional
-   `AL_ALERT_WEBHOOK_URL` (generate keys with `openssl rand -base64 1024` / `32`).
+   `AL_GRAFANA_PASSWORD`, `AL_SLURMDBD_DB_PASSWORD`, optional
+   `AL_ALERT_WEBHOOK_URL` (Alertmanager's webhook format; unset means log-only).
+   They are generated locally, not fetched. Write them once to the git-ignored
+   `.env` and source it in every shell that runs `make up`; new keys on a
+   re-apply restart munge and drop running jobs.
+
+   ```sh
+   [ -f .env ] || ( umask 077; {
+     echo "export AL_MUNGE_KEY_B64=$(openssl rand -base64 1024 | tr -d '\n')"
+     echo "export AL_SLURM_JWT_KEY_B64=$(openssl rand -base64 32)"
+     echo "export AL_GRAFANA_PASSWORD=$(openssl rand -hex 16)"
+     echo "export AL_SLURMDBD_DB_PASSWORD=$(openssl rand -hex 16)"
+     echo "# export AL_ALERT_WEBHOOK_URL=https://..."
+   } > .env )
+   . ./.env
+   ```
 3. `make up POOL=gpu` (on-demand; `spot = true` only once the account has G Spot quota).
    If EC2 returns `InsufficientInstanceCapacity`, set `az` to another zone and re-apply.
    Check `sinfo`, `kubectl get nodes`, Grafana on :3000.

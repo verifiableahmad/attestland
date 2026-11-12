@@ -2,9 +2,15 @@
 
 Containers have no hardware queues, so the lab cannot pause or mark traffic.
 This directory holds the configuration a hardware fabric would carry, and what
-each part does. `srl-roce-qos.cfg` is SR Linux syntax for a 7220 IXR-D/H
-class switch; `host-mlx5.sh` is the matching NIC setting on a GPU host.
-**Neither has been applied to hardware** - validate on the target release.
+each part does. `sonic-roce-qos.json` is a SONiC CONFIG_DB fragment for a
+backend switch port (`Ethernet0`; repeat the `PORT_QOS_MAP`, `QUEUE` and
+`PFC_WD` entries per backend port), loaded with
+`sonic-cfggen -j sonic-roce-qos.json --write-to-db && config save -y`.
+SONiC derives the lossless buffer profiles for priority 3 from `pfc_enable`
+and the port's cable length, so the fragment carries no `BUFFER_*` tables.
+`host-mlx5.sh` is the matching NIC setting on a GPU host.
+**Neither has been applied to hardware** - validate table and field names on
+the target SONiC release and platform.
 
 ## Traffic classes
 

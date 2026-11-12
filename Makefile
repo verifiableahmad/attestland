@@ -4,7 +4,7 @@
 #   make down POOL=gpu|cc        destroy it; ends every working session
 #   make reaper-up               reaper's AWS role, Azure app and repo variables (once)
 #   make lab-host-up / -down     AWS bare-metal Linux/KVM host for lab-up and provision
-#   make lab-up / lab-test       containerlab leaf-spine fabric (laptop)
+#   make lab-up / lab-test       containerlab leaf-spine fabric: SONiC (Linux x86), LAB_NOS=frr (laptop)
 #   make provision N=3           blank VMs -> Burn-in via Redfish + Tinkerbell (Linux/KVM host)
 #   make pool-move NODE=x TO=k8s|slurm
 #   make chaos FAULT=<name> TARGET=<node>
@@ -25,7 +25,7 @@ export ANSIBLE_CONFIG := $(CURDIR)/ansible/ansible.cfg
 
 .PHONY: help up down infra-up infra-down configure reaper-up reaper-down \
         lab-host-up lab-host-sync lab-host-ssh lab-host-down \
-        lab-up lab-test lab-down lab-rail-up provision provision-down \
+        lab-image lab-up lab-test lab-down lab-rail-up provision provision-down \
         pool-move chaos burnin nccl train train-sweep serve-bench ckpt-bench ckpt-interval \
         goodput receipts alverify cc-overhead healthd test test-go test-py lint plots
 
@@ -83,11 +83,16 @@ lab-host-down:
 	$(TOFU) -chdir=infra/lab-host destroy -input=false -auto-approve
 
 # --- Layer 2: network lab ---------------------------------------------------
-# LAB_NOS=srl (default, spec) or frr (fallback; runs on Docker Desktop, L2 VNIs only there)
-LAB_NOS ?= srl
+# LAB_NOS=sonic (default, ADR 012; docker-sonic-vs, Linux x86 only) or frr
+# (fallback; runs on Docker Desktop, L2 VNIs only there)
+LAB_NOS ?= sonic
 LAB_TOPO := $(if $(filter frr,$(LAB_NOS)),fabric-frr.clab.yml,fabric.clab.yml)
 
-lab-up:
+# docker-sonic-vs is a build artifact, not on a registry: download and load it once.
+lab-image:
+	./network/containerlab/sonic-image.sh
+
+lab-up: $(if $(filter frr,$(LAB_NOS)),,lab-image)
 	$(PY) network/containerlab/gen.py --out network/containerlab/configs
 	./network/containerlab/clab.sh deploy -t $(LAB_TOPO) --reconfigure --max-workers 2
 
@@ -97,7 +102,8 @@ lab-test:
 lab-down:
 	./network/containerlab/clab.sh destroy -t $(LAB_TOPO) --cleanup
 
-lab-rail-up:
+lab-rail-up: lab-image
+	$(PY) network/containerlab/gen.py --out network/containerlab/configs
 	./network/containerlab/clab.sh deploy -t rail.clab.yml --reconfigure
 
 # --- Layer 1: fleet ---------------------------------------------------------

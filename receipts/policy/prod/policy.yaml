@@ -13,7 +13,7 @@ gpu:
   verifier: nras
   issuer: https://nras.attestation.nvidia.com
   jwks_file: nras-jwks.json                               # pinned copy of https://nras.attestation.nvidia.com/.well-known/jwks.json
-  allowed_driver_versions: ["580.82.07"]                  # = versions.env NVIDIA_DRIVER_VERSION
+  allowed_driver_versions: ["580.196.07"]                  # = versions.env NVIDIA_DRIVER_VERSION
   allowed_vbios_versions: []                              # REPLACE: VBIOS of the H100 NVL in the pool
   claims:
     cc_mode: ""                                           # confirm NRAS claim for CC mode, then set

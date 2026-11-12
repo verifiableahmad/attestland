@@ -1,6 +1,18 @@
+# The cuda12 package depends on datacenter-gpu-manager-4-core at its own exact
+# version, so pinning only cuda12 leaves core resolving to the newest release
+# and conflicting. The packages carry epoch 1, which the pin has to spell out.
+- name: Pin every DCGM 4 package to the pinned version
+  ansible.builtin.copy:
+    dest: /etc/apt/preferences.d/dcgm
+    mode: "0644"
+    content: |
+      Package: datacenter-gpu-manager-4-*
+      Pin: version 1:{{ dcgm_version }}-*
+      Pin-Priority: 1001
+
 - name: DCGM (host engine, dcgmi diag)
   ansible.builtin.apt:
-    name: "datacenter-gpu-manager-4-cuda{{ cuda_version.split('.')[0] }}={{ dcgm_version }}*"
+    name: "datacenter-gpu-manager-4-cuda{{ cuda_version.split('.')[0] }}=1:{{ dcgm_version }}-*"
     update_cache: true
 
 - name: DCGM host engine

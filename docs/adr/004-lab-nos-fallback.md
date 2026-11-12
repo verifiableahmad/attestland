@@ -1,6 +1,6 @@
 # ADR 004: FRR fallback for the lab; SR Linux stays the default
 
-- Status: accepted
+- Status: superseded by ADR 012 (SONiC replaces SR Linux; the FRR fallback stays)
 - Date: 2026-11-07
 - Phase / section: Phase 1, spec 2.1
 

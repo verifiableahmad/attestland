@@ -8,9 +8,10 @@ import time
 
 import pytest
 
+import fabric
 from conftest import container, dexec
 
-UPLINKS = ("ethernet-1/49", "ethernet-1/50")
+UPLINKS = tuple(f"eth{fabric.UPLINK_PORT_BASE + s}" for s in range(fabric.N_SPINES))
 
 
 def _wait(pred, timeout=60, step=2):
@@ -47,7 +48,7 @@ def test_evpn_type2_on_every_leaf(nos, fab):
 def test_evpn_type5_on_every_leaf(nos, fab):
     if not nos.l3_supported(fab.leaves[0].name):
         pytest.skip("kernel lacks VRF support (Docker Desktop LinuxKit): "
-                    "L3 VNIs and type-5 routes need a Linux host or SR Linux")
+                    "L3 VNIs and type-5 routes need a Linux host")
     for leaf in fab.leaves:
         assert _wait(lambda: nos.evpn_route_count(leaf.name, 5) > 0, timeout=60), \
             f"{leaf.name}: no EVPN type-5 routes"

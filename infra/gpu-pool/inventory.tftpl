@@ -9,6 +9,7 @@ ${g.name} ansible_host=${g.public} private_ip=${g.private} instance_id=${g.id}
 
 [all:vars]
 ansible_user=${ssh_user}
+ansible_ssh_private_key_file=${ssh_private_key}
 al_cloud=aws
 al_region=${region}
 al_gpu_instance_type=${gpu_type}

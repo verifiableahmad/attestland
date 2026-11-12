@@ -4,7 +4,7 @@
   ansible.builtin.shell: |
     curl -fsSLo /tmp/k.deb https://developer.download.nvidia.com/compute/cuda/repos/ubuntu2204/x86_64/cuda-keyring_1.1-1_all.deb
     dpkg -i /tmp/k.deb && apt-get update
-    apt-get install -y nvidia-driver-{{ nvidia_driver_branch }}-open={{ nvidia_driver_version }}-0ubuntu1 docker.io \
+    apt-get install -y nvidia-driver-{{ nvidia_driver_branch }}-open={{ nvidia_driver_version }}-{{ nvidia_driver_pkg_rev }} docker.io \
       nvidia-container-toolkit={{ nvidia_container_toolkit_version }}-1
     nvidia-ctk runtime configure --runtime=docker && systemctl restart docker
     docker pull {{ vllm_receipts_image }}

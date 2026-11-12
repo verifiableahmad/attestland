@@ -166,7 +166,7 @@ exactly this.
 ```
                        laptop (no cloud)                   AWS us-east-1                 Azure eastus2
   ┌──────────────────────────────────────────┐   ┌───────────────────────────┐   ┌────────────────────────────┐
-  │ network lab (containerlab: SR Linux/FRR) │   │  GPU pool (phases 2-4)    │   │  confidential pool (5)     │
+  │ network lab (containerlab: SONiC/FRR)    │   │  GPU pool (phases 2-4)    │   │  confidential pool (5)     │
   │ unit + integration tests (Go, Python)    │   │  4 x g6.2xlarge (1 L4)    │   │  1 x NCC40ads_H100_v5      │
   │ receipt issue/verify on a test platform  │   │  + control VM + 4 S3      │   │  (SEV-SNP + H100, CC on)   │
   └──────────────────────────────────────────┘   │    buckets                │   │  + non-CC twin             │
@@ -249,8 +249,8 @@ makes the node unreachable, which Kubernetes and Slurm already treat as down.
 | --- | --- | --- |
 | **VPC with jumbo frames** | The cloud network for the GPU pool, with 9,001-byte packets (the AWS default inside a VPC) | Bigger packets mean fewer per-packet costs for all-reduce over TCP, which is all the L4 VMs have. |
 | **Network lab** (`network/containerlab/`) | A data-centre network running in containers on a laptop: 2 spine switches, 4 leaf switches, test hosts | Real data-centre networks are configured as code and tested before changes reach production. containerlab runs real switch software in containers, so routing configs can be tested like code. |
-| **SR Linux, FRR as fallback** | The switch operating systems in the lab | Nokia's SR Linux is free to run in a container and implements the protocols used in real AI data centres. It crashes on macOS Docker, so the same configs are also rendered for FRR, an open-source router (ADR 004). |
-| **eBGP underlay, EVPN/VXLAN overlay** | Routing between switches, plus virtual networks on top | The standard design for modern data-centre fabrics: every switch link is routed (no single big broadcast domain), traffic spreads over all equal paths, and tenants get isolated virtual networks. The lab tests check routing, isolation, path spreading and how fast traffic recovers when a link fails (0.2 s measured). |
+| **SONiC, FRR as fallback** | The switch operating systems in the lab | SONiC is the open-source switch OS that most AI Ethernet fabrics run on white-box and NVIDIA switches; its container build (`docker-sonic-vs`) runs the same configuration layer and FRR routing stack. It is x86-only, so on a Mac the same fabric is rendered for plain FRR, an open-source router (ADR 012, ADR 004). |
+| **eBGP underlay, EVPN/VXLAN overlay** | Routing between switches, plus virtual networks on top | The standard design for modern data-centre fabrics: every switch link is routed (no single big broadcast domain), traffic spreads over all equal paths, and tenants get isolated virtual networks. The lab tests check routing, isolation, path spreading and how fast traffic recovers when a link fails (0.2 s measured on FRR; SONiC not yet run). |
 | **Rail-optimised lab topology** | A second lab fabric where GPU *n* of every server connects to switch *n* | Large GPU clusters wire servers this way so that the same-numbered GPUs across servers, which talk most during all-reduce, are one switch hop apart. |
 | **Design note** (`network/design-note.md`) | Switch counts, link counts, bottlenecks and failure domains for 64 and 512 GPUs | The rented cluster is too small to show these problems, so the note reasons about them with stated assumptions. |
 | **NCCL benchmark** (`bench/nccl/`) | Measures all-reduce bandwidth between GPUs, over TCP and RDMA | This is the number that sets the ceiling on multi-node training speed. RDMA (network cards writing directly into another machine's memory) is not available on g6.2xlarge; on AWS it means EFA, which starts at g6.8xlarge (ADR 010). |
@@ -370,7 +370,7 @@ on a laptop has run: 55 Python and 41 Go tests (counting subtests) pass. Nothing
 but a one-VM test launch has run in the cloud yet.
 AWS GPU quota is in place and the Azure H100 quota was granted on 2026-11-10;
 the twin VM still needs Azure SKU access. Of the eight headline numbers, one exists so far (network
-convergence in the lab, 0.2 s). `docs/external-deps.md` lists every external
+convergence in the lab, 0.2 s on the FRR fabric; the SONiC fabric has not run yet). `docs/external-deps.md` lists every external
 dependency with its status and every assumption with how to confirm it, and
 `docs/runbook.md` gives the commands in order.
 

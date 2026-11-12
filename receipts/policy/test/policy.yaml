@@ -12,7 +12,7 @@ gpu:
   verifier: nras
   issuer: https://test-nras.attestland.local
   jwks_file: nras-jwks.json
-  allowed_driver_versions: ["580.82.07"]
+  allowed_driver_versions: ["580.196.07"]
 image:
   trusted_root: trusted_root.json
   certificate_identity: ci@attestland.test
