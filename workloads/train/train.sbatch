@@ -17,7 +17,7 @@ head=$(scontrol show hostnames "$SLURM_JOB_NODELIST" | head -1)
 export MASTER_ADDR=$head MASTER_PORT=29500
 export TORCH_NCCL_ASYNC_ERROR_HANDLING=1 NCCL_DEBUG=WARN
 export NCCL_SOCKET_IFNAME=${NCCL_SOCKET_IFNAME:-$(ip -o -4 route show to default | awk '{print $5}' | head -1)}
-set -a; source /etc/fleet/s3.env; set +a   # AL_S3_ENDPOINT, _ACCESS_KEY, _SECRET_KEY
+set -a; source /etc/fleet/s3.env; set +a   # AL_S3_REGION, AL_BUCKET_PREFIX (credentials: the node role)
 echo "$(date -u +%FT%TZ) job=$SLURM_JOB_ID restart=${SLURM_RESTART_COUNT:-0} nodes=$SLURM_JOB_NODELIST"
 
 srun --container-image="$PYTORCH_IMAGE" \

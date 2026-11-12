@@ -2,12 +2,12 @@
 # Burn-in for one GPU node (spec 1.2). Runs every check, writes raw outputs and a
 # JSON report; exit 0 only if every check passes. Target: under 30 minutes.
 #
-#   burnin.sh --peer <known-good peer IP> --sku g2-standard-8 --report /var/lib/fleet/burnin-report.json
+#   burnin.sh --peer <known-good peer IP> --sku g6.2xlarge --report /var/lib/fleet/burnin-report.json
 #
 # The inter-node checks need root SSH to the peer (ansible sets up the burn-in key).
 set -uo pipefail
 HERE=$(cd "$(dirname "$0")" && pwd)
-PEER="" SKU="" REPORT=/var/lib/fleet/burnin-report.json MTU=${MTU:-8896}
+PEER="" SKU="" REPORT=/var/lib/fleet/burnin-report.json MTU=${MTU:-9001}
 STRESS_S=${STRESS_S:-600} FLEET_MEDIAN=${FLEET_MEDIAN:-}
 while [[ $# -gt 0 ]]; do
   case $1 in

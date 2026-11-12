@@ -16,7 +16,7 @@
    fields included, so any edit after signing breaks the signature.
 4. **GPU result must be NVIDIA-signed** (NRAS EAT) by default. A local-verifier
    result is unsigned; the policy can allow it only explicitly.
-5. **Token expiry is not enforced** on CPU (GCA) and NRAS tokens: receipts are
+5. **Token expiry is not enforced** on CPU (MAA) and NRAS tokens: receipts are
    checked long after an 8-hour token expires. Freshness comes from the nonce.
 6. **Image proof** = the image's SLSA provenance attestation (a Sigstore
    bundle), verified offline with a pinned trusted root, against the expected
@@ -27,11 +27,8 @@
 
 ## Consequences
 
-A test platform (GCA-shaped CPU tokens and NRAS-shaped GPU results,
+A test platform (MAA-shaped CPU tokens and NRAS-shaped GPU results,
 signed by local keys) exercises the whole issue/verify path and all six
 negative tests on a laptop. It can never satisfy a
-production policy, which pins Google's and NVIDIA's keys.
-On GCP the receipt also embeds a raw TDX quote over the nonce, but v1 verifies
-only the GCA token; raw TDX quote verification is not in v1. The platform
-moved from Azure (SEV-SNP, Microsoft Azure Attestation) to GCP on 2026-11-08
-(ADR 006), and the Azure path was removed.
+production policy, which pins Microsoft's and NVIDIA's keys.
+v1 verifies the MAA token, not the raw SEV-SNP report (ADR 010).

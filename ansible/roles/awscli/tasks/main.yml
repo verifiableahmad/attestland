@@ -1,0 +1,22 @@
+# AWS CLI v2 on the control VM: chaos node-loss (ec2 stop/start) and the
+# topology lookup (ec2 describe-instance-topology) use it with the node role.
+# Same version as AWSCLI_IMAGE in versions.env.
+- name: Install AWS CLI v2
+  ansible.builtin.shell: |
+    set -euo pipefail
+    v={{ awscli_image.split(':')[1] }}
+    curl -fsSLo /tmp/awscliv2.zip "https://awscli.amazonaws.com/awscli-exe-linux-x86_64-${v}.zip"
+    apt-get install -y unzip
+    rm -rf /tmp/aws && unzip -q /tmp/awscliv2.zip -d /tmp
+    /tmp/aws/install --update
+    rm -rf /tmp/aws /tmp/awscliv2.zip
+  args:
+    executable: /bin/bash
+    creates: /usr/local/bin/aws
+
+- name: Default region for the CLI
+  ansible.builtin.copy:
+    dest: /etc/profile.d/al-aws.sh
+    mode: "0644"
+    content: |
+      export AWS_REGION={{ al_region }} AWS_DEFAULT_REGION={{ al_region }}

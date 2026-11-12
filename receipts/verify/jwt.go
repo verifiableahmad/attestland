@@ -151,7 +151,7 @@ func claimString(c map[string]any, path string) (string, error) {
 }
 
 // claimStrings reads a claim that may be a string or an array of strings
-// (GCA's eat_nonce is either).
+// (EAT nonce claims may be either).
 func claimStrings(c map[string]any, path string) ([]string, error) {
 	v, ok := claim(c, path)
 	if !ok {

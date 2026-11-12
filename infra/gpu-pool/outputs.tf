@@ -1,15 +1,14 @@
 output "ansible_inventory" {
-  sensitive = true
   value = templatefile("${path.module}/inventory.tftpl", {
     ssh_user = var.ssh_user
     region   = var.region
-    gpu_type = var.gpu_machine_type
-    control  = { name = google_compute_instance.control.name, public = google_compute_instance.control.network_interface[0].access_config[0].nat_ip, private = google_compute_instance.control.network_interface[0].network_ip }
-    s3       = { endpoint = "https://storage.googleapis.com", access_key = google_storage_hmac_key.nodes.access_id, secret_key = google_storage_hmac_key.nodes.secret, prefix = local.bucket_prefix }
-    gpus     = [for g in google_compute_instance.gpu : { name = g.name, public = g.network_interface[0].access_config[0].nat_ip, private = g.network_interface[0].network_ip }]
+    gpu_type = var.gpu_instance_type
+    control  = { name = aws_instance.control.tags.Name, id = aws_instance.control.id, public = aws_instance.control.public_ip, private = aws_instance.control.private_ip }
+    prefix   = local.bucket_prefix
+    gpus     = [for g in aws_instance.gpu : { name = g.tags.Name, id = g.id, public = g.public_ip, private = g.private_ip }]
   })
 }
 
 output "control_ip" {
-  value = google_compute_instance.control.network_interface[0].access_config[0].nat_ip
+  value = aws_instance.control.public_ip
 }

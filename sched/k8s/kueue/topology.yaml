@@ -1,7 +1,7 @@
 # Kueue topology-aware scheduling (ADR 007): the levels of the physical
-# hierarchy, widest first. The labels come from GCE's physical_host_topology
-# (ansible role topology); nodes without position data are labelled "unknown"
-# and form one group. Kueue v0.14 serves this API at a version this file cannot
+# hierarchy, widest first. The labels come from EC2's instance topology
+# (ansible role topology); nodes without position data (every g6.2xlarge) are
+# labelled "unknown" and form one group. Kueue v0.14 serves this API at a version this file cannot
 # pin with certainty (v1alpha1 before TAS beta, v1beta1/v1beta2 later), so the
 # k8s_addons role rewrites apiVersion to the CRD's storage version on apply.
 apiVersion: kueue.x-k8s.io/v1alpha1

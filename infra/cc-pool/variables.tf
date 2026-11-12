@@ -1,59 +1,34 @@
-variable "project_id" {
+variable "subscription_id" {
   type        = string
-  description = "GCP project; the same one as the GPU pool."
+  description = "Azure subscription that holds the confidential pool."
 }
 
-variable "project_number" {
+variable "location" {
   type        = string
-  default     = ""
-  description = "Numeric project id; only needed for the billing budget."
-}
-
-variable "billing_account_id" {
-  type        = string
-  default     = ""
-  description = "Billing account for budget alerts (50/80/100%). Empty skips the budget."
-}
-
-variable "budget_usd" {
-  type    = number
-  default = 250
-}
-
-variable "region" {
-  type    = string
-  default = "us-central1"
+  default     = "eastus2"
+  description = "Must offer NCC40ads_H100_v5 to the subscription (az vm list-skus --all); eastus2, centralus and westeurope do."
 }
 
 variable "zone" {
   type        = string
-  default     = "us-central1-a"
-  description = "A zone offering Confidential VM with H100."
-  validation {
-    condition     = contains(["us-central1-a", "us-east5-a", "europe-west4-c"], var.zone)
-    error_message = "Confidential A3 High is documented only in us-central1-a, us-east5-a and europe-west4-c."
-  }
+  default     = "1"
+  description = "Availability zone offering the size; NCC40ads_H100_v5 is in eastus2 zone 1 only."
 }
 
-variable "subnet_cidr" {
-  type    = string
-  default = "10.30.1.0/24"
-}
-
-variable "machine_type" {
-  type    = string
-  default = "a3-highgpu-1g" # 1x H100 80GB, Sapphire Rapids
-}
-
-variable "image" {
+variable "maa_url" {
   type        = string
-  default     = "projects/ubuntu-os-cloud/global/images/family/ubuntu-2204-lts"
-  description = "Ubuntu 22.04+ or COS 121+ are the images supported with confidential GPUs."
+  default     = "https://sharedeus2.eus2.attest.azure.net"
+  description = "Microsoft Azure Attestation instance the issuer uses; the shared one in the pool's region."
 }
 
-variable "boot_disk_type" {
+variable "cc_vm_size" {
   type    = string
-  default = "pd-balanced"
+  default = "Standard_NCC40ads_H100_v5" # AMD SEV-SNP + 1x H100 NVL, CC on
+}
+
+variable "twin_vm_size" {
+  type    = string
+  default = "Standard_NC40ads_H100_v5" # same GPU, no SEV-SNP, no CC
 }
 
 variable "create_twin" {
@@ -63,7 +38,8 @@ variable "create_twin" {
 }
 
 variable "admin_cidrs" {
-  type = list(string)
+  type        = list(string)
+  description = "CIDRs allowed to reach SSH."
 }
 
 variable "ssh_user" {
@@ -85,4 +61,21 @@ variable "keep" {
   type        = bool
   default     = false
   description = "keep=true exempts the VMs from the 8-hour reaper."
+}
+
+variable "budget_usd" {
+  type    = number
+  default = 250
+}
+
+variable "budget_start_date" {
+  type        = string
+  default     = "2026-11-01T00:00:00Z"
+  description = "First day of a month, RFC3339."
+}
+
+variable "budget_contact_emails" {
+  type        = list(string)
+  default     = []
+  description = "Budget alerts (50/80/100%) go here. Empty skips the budget."
 }

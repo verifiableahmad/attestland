@@ -1,6 +1,11 @@
-# Fast tier: local NVMe mounted at /scratch (GCP local SSD).
+# Fast tier: local NVMe mounted at /scratch (EC2 instance store; g6.2xlarge has one 450 GB disk).
 - name: Find local NVMe SSDs
-  ansible.builtin.shell: ls /dev/disk/by-id/google-local-nvme-ssd-* 2>/dev/null || true
+  ansible.builtin.shell: |
+    for d in /dev/disk/by-id/nvme-Amazon_EC2_NVMe_Instance_Storage_*; do
+      [[ -e $d && $d != *-part* ]] && readlink -f "$d"
+    done | sort -u
+  args:
+    executable: /bin/bash
   register: ssds
   changed_when: false
 

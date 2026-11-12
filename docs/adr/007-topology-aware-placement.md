@@ -10,9 +10,9 @@ The cloud-relevant parts of dc-orch (a separate laptop prototype of
 network-aware GPU scheduling) move into this project:
 
 1. **Physical position becomes scheduler topology.** The GPU pool is created in
-   a GCE compact placement policy for on-demand runs. Each node's block and
-   sub-block (metadata key `physical_host_topology`) are turned by
-   `fleet/topology/topology.py` into node labels
+   an EC2 cluster placement group for on-demand runs. Each node's last two
+   network-node layers from EC2 `DescribeInstanceTopology` (block and
+   sub-block) are turned by `fleet/topology/topology.py` into node labels
    (`fleet.attestland/topology-block`, `fleet.attestland/topology-subblock`) and a
    Slurm `topology.conf`.
 2. **Both schedulers use it.** Slurm runs `TopologyPlugin=topology/tree`.
@@ -32,9 +32,10 @@ controller tainted nodes whose rail link was down (read with `docker exec`).
 Its roadmap phases 3–5 and 7 (gang admission, telemetry, remediation, generated
 topology) already exist here. The owner asked for the cloud-based parts only.
 
-On GCE, a VM's position is hidden unless it is in a compact placement policy
-(or on some A3/A4 types). G2 supports compact placement. Spot VMs with compact
-placement are not documented, so Spot development runs skip it.
+EC2 reports instance topology only for
+some larger GPU and HPC types. It returned nothing for a running g6.2xlarge, so
+on today's pool every node is `unknown` and both schedulers see one group. The
+cluster placement group still keeps the VMs close.
 
 ## Options considered
 
@@ -47,13 +48,14 @@ placement are not documented, so Spot development runs skip it.
 
 ## Consequences
 
-- On today's 4 single-L4 VMs the effect is small: compact placement already
-  keeps them close, and the rail rule cannot fire on a single-NIC VM. The
+- On today's 4 single-L4 VMs the effect is nil: EC2 gives no position for
+  g6.2xlarge, cluster placement already keeps them close, and the rail rule
+  cannot fire on a single-NIC VM. The
   plumbing matters for multi-GPU, multi-NIC machines and the 64/512-GPU designs.
 - Nodes without position data are labelled `unknown` and form one group, so
   topology never blocks scheduling.
 - Not merged (laptop-only): dc-orch's kind + containerlab placement lab and its
-  default-vs-topology benchmark. dc-orch stays at `~/Code/dc-orch`, untouched.
-- Revisit: measure step time with and without compact placement once the pool
+  default-vs-topology benchmark. dc-orch stays at `~/Code/dc-orch`.
+- Revisit: measure step time with and without cluster placement once the pool
   runs; if Kueue's placement is not good enough on larger machines, reconsider
   the custom plugin.

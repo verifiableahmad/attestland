@@ -1,4 +1,4 @@
-# Non-CC twin (a3-highgpu-1g without TDX):
+# Non-CC twin (Standard_NC40ads_H100_v5, no SEV-SNP):
 # same driver, toolkit and image, no CC mode.
 - name: Driver, toolkit, docker
   ansible.builtin.shell: |

@@ -9,3 +9,10 @@
     chmod 0755 /usr/local/bin/cosign
   args:
     creates: /usr/local/bin/cosign
+- name: Receipt issuer environment (run-job.sh and attest_time.sh source it)
+  ansible.builtin.copy:
+    dest: /etc/fleet/receipts.env
+    mode: "0644"
+    content: |
+      AL_PLATFORM=azure
+      MAA_URL={{ maa_url }}

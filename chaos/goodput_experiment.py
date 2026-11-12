@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """make goodput: baseline, then arms A and B x repeats, same seeded schedule (spec 6.3).
 
-Runs on the control VM (needs sbatch/squeue/scontrol, ssh to GPU nodes, gcloud).
+Runs on the control VM (needs sbatch/squeue/scontrol, ssh to GPU nodes, the aws CLI).
 For every run it records the orchestrator's events (submit, inject, job_stopped)
 next to the training progress log, then computes goodput with chaos/goodput.py.
 """

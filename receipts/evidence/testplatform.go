@@ -12,12 +12,13 @@ import (
 	"math/big"
 	"os"
 	"path/filepath"
+	"strings"
 	"time"
 
 	"github.com/golang-jwt/jwt/v5"
 )
 
-// TestPlatform stands in for the CPU attestation service (Google Cloud
+// TestPlatform stands in for the CPU attestation service (Microsoft Azure
 // Attestation) and NVIDIA NRAS on a machine with
 // no TEE: it signs tokens with the same claim shapes, using its own keys. A
 // test-platform receipt passes only a policy that pins these keys
@@ -25,12 +26,13 @@ import (
 type TestPlatform struct {
 	cpuKey *rsa.PrivateKey
 	gpuKey *ecdsa.PrivateKey
-	// CPUVerifier picks the CPU token shape: gca (default, only).
+	// CPUVerifier picks the CPU token shape: maa (default, only).
 	CPUVerifier string
 	// Values the fake services attest to.
-	Driver, VBIOS string
-	Debuggable    bool
-	Now           func() time.Time
+	LaunchMeasurement string
+	Driver, VBIOS     string
+	Debuggable        bool
+	Now               func() time.Time
 }
 
 const (
@@ -40,7 +42,7 @@ const (
 
 // NewTestPlatform creates fresh keys, or loads them from dir if present.
 func NewTestPlatform(dir string) (*TestPlatform, error) {
-	t := &TestPlatform{Driver: "580.82.07",
+	t := &TestPlatform{LaunchMeasurement: "a1b2c3" + strings.Repeat("0", 90), Driver: "580.82.07",
 		VBIOS: "96.00.9F.00.04", Now: time.Now}
 	if dir != "" {
 		if err := t.load(dir); err == nil {
@@ -64,21 +66,21 @@ func (t *TestPlatform) AttestCPU(_ context.Context, nonce string) (CPU, error) {
 	now := t.Now()
 	claims := jwt.MapClaims{"iss": TestCPUIssuer, "iat": now.Unix(), "exp": now.Add(time.Hour).Unix()}
 	switch t.CPUVerifier {
-	case "", "gca":
-		dbg := "disabled-since-boot"
-		if t.Debuggable {
-			dbg = "enabled"
+	case "", "maa":
+		claims["x-ms-isolation-tee"] = map[string]any{
+			"x-ms-attestation-type":           "sevsnpvm",
+			"x-ms-compliance-status":          "azure-compliant-cvm",
+			"x-ms-sevsnpvm-launchmeasurement": t.LaunchMeasurement,
+			"x-ms-sevsnpvm-is-debuggable":     t.Debuggable,
 		}
-		claims["hwmodel"], claims["swname"], claims["secboot"], claims["dbgstat"] = "GCP_INTEL_TDX", "GCE", true, dbg
-		claims["eat_nonce"] = []string{nonce}
-		claims["submods"] = map[string]any{"gce": map[string]any{"project_id": "test-project", "zone": "us-central1-a"}}
+		claims["x-ms-runtime"] = map[string]any{"client-payload": map[string]any{"nonce": nonce}}
 	default:
 		return CPU{}, fmt.Errorf("test platform: unknown CPU verifier %q", t.CPUVerifier)
 	}
 	tok := jwt.NewWithClaims(jwt.SigningMethodRS256, claims)
 	tok.Header["kid"] = "test-cpu"
 	s, err := tok.SignedString(t.cpuKey)
-	return CPU{Type: "tdx", VerifierToken: s, Tool: "test-platform"}, err
+	return CPU{Type: "sev-snp", VerifierToken: s, Tool: "test-platform"}, err
 }
 
 func (t *TestPlatform) AttestGPU(_ context.Context, nonce string) (GPU, error) {

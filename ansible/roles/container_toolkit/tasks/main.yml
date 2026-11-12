@@ -18,5 +18,4 @@
 
 - name: CDI spec for podman (regenerated at boot by nvidia-cdi-refresh)
   ansible.builtin.command: nvidia-ctk cdi generate --output=/etc/cdi/nvidia.yaml
-  when: not (image_build | default(false))
   changed_when: true

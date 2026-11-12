@@ -2,7 +2,7 @@
 # make chaos FAULT=<name> TARGET=<node> [ARGS...]
 #
 # Faults (spec 6.2):
-#   node-loss    stop the VM through the provider API (GCP)       revert: start it
+#   node-loss    stop the VM through the provider API (AWS)       revert: start it
 #   rank-crash   kill -9 the training process on the node
 #   net-delay    tc netem delay on the data NIC (DELAY=5ms|50ms)   revert: remove qdisc
 #   pkt-loss     tc netem loss (LOSS=0.1%|1%)                      revert: remove qdisc
@@ -17,7 +17,14 @@ HERE=$(cd "$(dirname "$0")" && pwd)
 LOG=${CHAOS_LOG:-$HERE/log/injections.jsonl}
 mkdir -p "$(dirname "$LOG")"
 SSH=${CHAOS_SSH:-ssh -o StrictHostKeyChecking=no -o ConnectTimeout=10}
-ZONE=${GCP_ZONE:-us-central1-a}
+REGION=${AWS_REGION:-us-east-1}
+# EC2 instance id of the target node (instances carry Name=<node>).
+instance_id() {
+  aws ec2 describe-instances --region "$REGION" --output text \
+    --filters "Name=tag:Name,Values=$target" Name=tag:project,Values=attestland \
+              Name=instance-state-name,Values=pending,running,stopping,stopped \
+    --query 'Reservations[0].Instances[0].InstanceId'
+}
 remote() { $SSH "$target" sudo bash -c "$(printf '%q ' "$@")"; }
 record() {
   printf '{"t": %s, "fault": "%s", "target": "%s", "action": "%s", "detail": "%s"}\n' \
@@ -33,8 +40,9 @@ repair() {
 }
 
 case "$fault/$action" in
-  node-loss/inject)   record "gcloud stop"; gcloud compute instances stop "$target" --zone "$ZONE" --async --quiet ;;
-  node-loss/--revert) gcloud compute instances start "$target" --zone "$ZONE" --quiet; record "gcloud start"; sleep 60; repair ;;
+  node-loss/inject)   record "ec2 stop"; aws ec2 stop-instances --region "$REGION" --instance-ids "$(instance_id)" >/dev/null ;;
+  node-loss/--revert) id=$(instance_id); aws ec2 start-instances --region "$REGION" --instance-ids "$id" >/dev/null
+                      aws ec2 wait instance-running --region "$REGION" --instance-ids "$id"; record "ec2 start"; sleep 60; repair ;;
   rank-crash/inject)  record "kill -9 train.py"; remote pkill -9 -f 'workloads/train/train.py' ;;
   net-delay/inject)   record "netem delay ${DELAY:-5ms}"; $SSH "$target" "sudo tc qdisc replace dev $iface root netem delay ${DELAY:-5ms}" ;;
   pkt-loss/inject)    record "netem loss ${LOSS:-0.1%}"; $SSH "$target" "sudo tc qdisc replace dev $iface root netem loss ${LOSS:-0.1%}" ;;

@@ -31,7 +31,7 @@ type Job struct {
 type CPUTEE struct {
 	Type          string `json:"type"`
 	Evidence      string `json:"evidence"`       // base64 raw report / quote (may be empty when only a token exists)
-	VerifierToken string `json:"verifier_token"` // Google Cloud Attestation JWT
+	VerifierToken string `json:"verifier_token"` // Microsoft Azure Attestation JWT
 	Tool          string `json:"tool,omitempty"` // tool + version that produced the evidence
 }
 

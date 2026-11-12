@@ -7,7 +7,7 @@
 ## Decision
 
 The NVIDIA driver, container toolkit, DCGM host engine and DCGM exporter are
-installed on the host (Ansible / Packer). The GPU Operator runs with
+installed on the host by Ansible. The GPU Operator runs with
 `driver.enabled=false`, `toolkit.enabled=false`, `dcgmExporter.enabled=false`
 and provides the device plugin and GPU feature discovery.
 
@@ -22,4 +22,4 @@ Enroot and podman need.
 ## Consequences
 
 One toolkit configures containerd (`nvidia-ctk runtime configure`) and podman
-(CDI). Upgrades happen in one place (versions.env → Packer image).
+(CDI). Upgrades happen in one place (versions.env → Ansible).

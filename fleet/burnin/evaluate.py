@@ -178,7 +178,7 @@ def main() -> int:
     ap.add_argument("--sku", required=True)
     ap.add_argument("--node", required=True)
     ap.add_argument("--ngpus", type=int, required=True)
-    ap.add_argument("--mtu", type=int, default=8896)
+    ap.add_argument("--mtu", type=int, default=9001)
     ap.add_argument("--fleet-median-busbw", type=float, default=None)
     ap.add_argument("--baselines", type=Path, default=HERE / "baselines.yaml")
     ap.add_argument("--versions", type=Path, default=Path("/etc/fleet/versions.env"))

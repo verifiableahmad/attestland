@@ -27,11 +27,11 @@ def healthy(raw: Path, driver: str | None = None) -> Path:
         + "".join(f"2026/11/07 12:00:{i:02d}, Not Active, Not Active, Not Active, Not Active\n" for i in range(0, 60, 5)))
     (raw / "stress_diag.json").write_text('{"status": "Pass"}')
     (raw / "nccl_intra.txt").write_text("# Avg bus bandwidth    : 0.0\n")
-    (raw / "nccl_inter.txt").write_text("# Avg bus bandwidth    : 1.62\n")
+    (raw / "nccl_inter.txt").write_text("# Avg bus bandwidth    : 0.55\n")
     for job, key, v in (("seqread", "read", ("bw", 700 * 1024)), ("seqwrite", "write", ("bw", 400 * 1024)),
                         ("randread", "read", ("iops", 160000)), ("randwrite", "write", ("iops", 90000))):
         (raw / f"fio_{job}.json").write_text(json.dumps({"jobs": [{key: {v[0]: v[1]}}]}))
-    (raw / "iperf3.json").write_text(json.dumps({"end": {"sum_received": {"bits_per_second": 15.2e9}}}))
+    (raw / "iperf3.json").write_text(json.dumps({"end": {"sum_received": {"bits_per_second": 5.1e9}}}))
     (raw / "mtu_check.txt").write_text("MTU_OK\n")
     (raw / "software.json").write_text(json.dumps({
         "driver": driver or VERSIONS["NVIDIA_DRIVER_VERSION"], "cuda": VERSIONS["CUDA_VERSION"],
@@ -40,7 +40,7 @@ def healthy(raw: Path, driver: str | None = None) -> Path:
 
 
 def run(raw, **kw):
-    return evaluate(raw, "g2-standard-8", BASE, VERSIONS, kw.get("median"), 1, 8896, "al-gpu-01")
+    return evaluate(raw, "g6.2xlarge", BASE, VERSIONS, kw.get("median"), 1, 9001, "al-gpu-01")
 
 
 def by_name(r):
@@ -65,7 +65,7 @@ def test_wrong_driver_fails_software_check(tmp_path):
     (lambda raw: (raw / "nvidia_smi_ecc.txt").write_text("DRAM Uncorrectable : 2\nPending : No\n"), "memory_health"),
     (lambda raw: (raw / "nvidia_smi_ecc.txt").write_text("DRAM Uncorrectable : 0\nPending : Yes\n"), "memory_health"),
     (lambda raw: (raw / "throttle_samples.csv").write_text("t,a,b,c,d\n2026, Not Active, Active, Not Active, Not Active\n"), "sustained_load"),
-    (lambda raw: (raw / "nccl_inter.txt").write_text("# Avg bus bandwidth    : 0.9\n"), "inter_node_collectives"),
+    (lambda raw: (raw / "nccl_inter.txt").write_text("# Avg bus bandwidth    : 0.3\n"), "inter_node_collectives"),
     (lambda raw: (raw / "mtu_check.txt").write_text("MTU_FAIL\n"), "network"),
     (lambda raw: (raw / "dcgm_diag_r3.json").write_text(json.dumps({"DCGM Diagnostic": {"test_categories": [
         {"tests": [{"name": "pcie", "results": [{"status": "Fail"}]}]}]}})), "gpu_diagnostic"),
@@ -79,6 +79,6 @@ def test_each_failure_is_caught(tmp_path, mutate, check):
 
 def test_inter_node_uses_fleet_median_when_given(tmp_path):
     raw = healthy(tmp_path / "raw")
-    r = evaluate(raw, "g2-standard-8", BASE, VERSIONS, 2.0, 1, 8896, "n")   # 1.62 < 0.9 * 2.0
+    r = evaluate(raw, "g6.2xlarge", BASE, VERSIONS, 2.0, 1, 9001, "n")   # 0.55 < 0.9 * 2.0
     c = by_name(r)["inter_node_collectives"]
     assert not c["pass"] and c["reference"] == "fleet_median"

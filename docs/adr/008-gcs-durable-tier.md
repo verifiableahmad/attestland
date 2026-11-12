@@ -1,6 +1,6 @@
 # ADR 008: Cloud Storage for the durable tier, replacing MinIO
 
-- Status: accepted
+- Status: superseded by ADR 010 (the durable tier is S3, reached with the nodes' instance role)
 - Date: 2026-11-08
 - Phase / section: Phase 4, spec 5.1 (supersedes ADR 002)
 
@@ -40,7 +40,7 @@ will get no security fixes. Everything else already runs on GCP (ADR 006).
   They prove the code, not Google's endpoint.
 - Recent boto3 sends CRC checksum headers that Google's endpoint can reject, so every
   client sets `request_checksum_calculation=when_required` (boto3, s3fs, aws-cli env vars).
-  This is an assumption until the first run (external-deps, assumption 28).
+  This was an assumption until the first run.
 - Durable-tier timings change: Cloud Storage over the network instead of MinIO on local SSD.
   The Young–Daly interval uses the measured upload time, so Phase 4 numbers must be re-taken.
 - Old object versions are deleted 14 days after they stop being current. `tofu destroy`

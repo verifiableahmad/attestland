@@ -131,6 +131,15 @@ func (v *Verifier) cpu(r *receipt.Receipt) ([]string, error) {
 			return nil, fmt.Errorf("claim %s = %q, policy wants %q", k, got, p.checks[k])
 		}
 	}
+	if len(p.AllowedLaunchMeasurements) > 0 {
+		m, err := claimString(c, p.Claims.LaunchMeasurement)
+		if err != nil {
+			return nil, err
+		}
+		if !containsFold(p.AllowedLaunchMeasurements, m) {
+			return nil, fmt.Errorf("launch measurement %s not on the allow-list", m)
+		}
+	}
 	ns, err := claimStrings(c, p.Claims.Nonce)
 	if err != nil {
 		return nil, err

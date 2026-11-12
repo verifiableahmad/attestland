@@ -1,169 +1,236 @@
-# GPU pool (phases 2-4): 4 x g2-standard-8 (1x L4), a control VM (Slurm + k8s
-# control plane + monitoring); the durable tier is Cloud Storage buckets (storage.tf).
+# GPU pool (phases 2-4, ADR 010): 4 x g6.2xlarge (1x L4), a control VM (Slurm + k8s
+# control plane + monitoring); the durable tier is S3 buckets (storage.tf).
 terraform {
   required_version = ">= 1.8"
   required_providers {
-    google = {
-      source  = "hashicorp/google"
+    aws = {
+      source  = "hashicorp/aws"
       version = "~> 6.0"
     }
   }
 }
 
-provider "google" {
-  project = var.project_id
-
-  # Billing Budgets needs a quota project; ADC does not set one.
-  user_project_override = true
-  billing_project       = var.project_id
-  region                = var.region
-  zone                  = var.zone
-}
-
-locals {
-  labels = {
-    project = "attestland"
-    phase   = tostring(var.phase)
-    owner   = var.owner
-    keep    = var.keep ? "true" : "false"
-  }
-  ssh_keys = "${var.ssh_user}:${trimspace(file(pathexpand(var.ssh_public_key_path)))}"
-}
-
-resource "google_compute_network" "al" {
-  name                    = "al-gpu"
-  auto_create_subnetworks = false
-  mtu                     = 8896 # jumbo frames for NCCL over TCP
-}
-
-resource "google_compute_subnetwork" "al" {
-  name          = "al-gpu-${var.region}"
-  ip_cidr_range = var.subnet_cidr
-  network       = google_compute_network.al.id
-  region        = var.region
-}
-
-resource "google_compute_firewall" "internal" {
-  name          = "al-gpu-internal"
-  network       = google_compute_network.al.name
-  source_ranges = [var.subnet_cidr]
-  allow { protocol = "all" }
-}
-
-resource "google_compute_firewall" "admin" {
-  name          = "al-gpu-admin"
-  network       = google_compute_network.al.name
-  source_ranges = var.admin_cidrs
-  allow {
-    protocol = "tcp"
-    ports    = ["22", "3000", "6443"] # ssh, grafana, k8s api
-  }
-}
-
-resource "google_compute_instance" "control" {
-  name         = "al-control"
-  machine_type = var.control_machine_type
-  labels       = merge(local.labels, { role = "control" })
-  tags         = ["al-control"]
-
-  boot_disk {
-    initialize_params {
-      image = var.cpu_image
-      size  = 100
-      type  = "pd-balanced"
-    }
-  }
-  network_interface {
-    subnetwork = google_compute_subnetwork.al.id
-    network_ip = cidrhost(var.subnet_cidr, 10)
-    access_config {}
-  }
-  metadata = { ssh-keys = local.ssh_keys }
-  service_account {
-    email  = google_service_account.nodes.email
-    scopes = ["cloud-platform"]
-  }
-}
-
-# Compact placement (ADR 007): GCE places the GPU VMs physically close and
-# exposes each VM's block / sub-block, which becomes Slurm and Kueue topology.
-# Only for on-demand runs: Spot with compact placement is not documented.
-locals {
-  compact = var.compact_placement && !var.spot
-}
-
-resource "google_compute_resource_policy" "gpu_compact" {
-  count  = local.compact ? 1 : 0
-  name   = "al-gpu-compact"
+provider "aws" {
   region = var.region
-  group_placement_policy {
-    collocation = "COLLOCATED"
-  }
-}
-
-resource "google_compute_instance" "gpu" {
-  count        = var.gpu_nodes
-  name         = format("al-gpu-%02d", count.index + 1)
-  machine_type = var.gpu_machine_type
-  labels       = merge(local.labels, { role = "gpu" })
-
-  boot_disk {
-    initialize_params {
-      image = var.gpu_image
-      size  = 200
-      type  = "pd-balanced"
+  default_tags {
+    tags = {
+      project = "attestland"
+      phase   = tostring(var.phase)
+      owner   = var.owner
+      keep    = var.keep ? "true" : "false"
     }
   }
-  scratch_disk { interface = "NVME" } # /scratch fast tier
-  resource_policies = local.compact ? [google_compute_resource_policy.gpu_compact[0].id] : []
-  network_interface {
-    subnetwork = google_compute_subnetwork.al.id
-    network_ip = cidrhost(var.subnet_cidr, 100 + count.index + 1)
-    nic_type   = "GVNIC"
-    access_config {}
-  }
-  scheduling {
-    on_host_maintenance         = "TERMINATE"
-    automatic_restart           = !var.spot
-    preemptible                 = var.spot
-    provisioning_model          = var.spot ? "SPOT" : "STANDARD"
-    instance_termination_action = var.spot ? "STOP" : null
-  }
-  metadata = { ssh-keys = local.ssh_keys }
-  service_account {
-    email  = google_service_account.nodes.email
-    scopes = ["cloud-platform"]
+}
+
+data "aws_caller_identity" "current" {}
+
+# Ubuntu 22.04 (ADR 009).
+data "aws_ami" "ubuntu" {
+  most_recent = true
+  owners      = ["099720109477"] # Canonical
+  filter {
+    name   = "name"
+    values = ["ubuntu/images/hvm-ssd/ubuntu-jammy-22.04-amd64-server-*"]
   }
 }
 
-resource "google_service_account" "nodes" {
-  account_id   = "al-nodes"
-  display_name = "Attestland nodes"
+locals {
+  # cloud-init: the same admin user as the confidential pool, instead of the AMI's default.
+  user_data    = <<-EOT
+    #cloud-config
+    users:
+      - default
+      - name: ${var.ssh_user}
+        sudo: ALL=(ALL) NOPASSWD:ALL
+        shell: /bin/bash
+        ssh_authorized_keys:
+          - ${trimspace(file(pathexpand(var.ssh_public_key_path)))}
+  EOT
+  subnet_cidrs = { for i, az in var.azs : az => cidrsubnet(var.vpc_cidr, 8, i) }
+  subnet_cidr  = local.subnet_cidrs[var.az]
 }
 
-# Chaos "node loss" stops VMs through the provider API from the control VM.
-resource "google_project_iam_member" "chaos_stop" {
-  project = var.project_id
-  role    = "roles/compute.instanceAdmin.v1"
-  member  = "serviceAccount:${google_service_account.nodes.email}"
+resource "aws_vpc" "al" {
+  cidr_block           = var.vpc_cidr
+  enable_dns_hostnames = true
+  tags                 = { Name = "al-gpu" }
 }
 
-resource "google_billing_budget" "al" {
-  count           = var.billing_account_id == "" ? 0 : 1
-  billing_account = var.billing_account_id
-  display_name    = "attestland"
-  budget_filter {
-    projects = ["projects/${var.project_number}"]
-    labels   = { project = "attestland" }
+resource "aws_internet_gateway" "al" {
+  vpc_id = aws_vpc.al.id
+  tags   = { Name = "al-gpu" }
+}
+
+resource "aws_route_table" "al" {
+  vpc_id = aws_vpc.al.id
+  route {
+    cidr_block = "0.0.0.0/0"
+    gateway_id = aws_internet_gateway.al.id
   }
-  amount {
-    specified_amount {
-      currency_code = "USD"
-      units         = tostring(var.budget_usd)
+  tags = { Name = "al-gpu" }
+}
+
+# One subnet per zone, so moving the pool to another zone when one runs out of
+# g6 capacity is a change of var.az, not of the network.
+resource "aws_subnet" "al" {
+  for_each                = local.subnet_cidrs
+  vpc_id                  = aws_vpc.al.id
+  cidr_block              = each.value
+  availability_zone       = each.key
+  map_public_ip_on_launch = true
+  tags                    = { Name = "al-gpu-${each.key}" }
+}
+
+resource "aws_route_table_association" "al" {
+  for_each       = aws_subnet.al
+  subnet_id      = each.value.id
+  route_table_id = aws_route_table.al.id
+}
+
+resource "aws_security_group" "al" {
+  name        = "al-gpu"
+  description = "Attestland GPU pool"
+  vpc_id      = aws_vpc.al.id
+  tags        = { Name = "al-gpu" }
+}
+
+resource "aws_vpc_security_group_ingress_rule" "internal" {
+  security_group_id = aws_security_group.al.id
+  cidr_ipv4         = var.vpc_cidr
+  ip_protocol       = "-1"
+}
+
+resource "aws_vpc_security_group_ingress_rule" "admin" {
+  for_each          = { for p in setproduct(var.admin_cidrs, [22, 3000, 6443]) : "${p[0]}-${p[1]}" => p } # ssh, grafana, k8s api
+  security_group_id = aws_security_group.al.id
+  cidr_ipv4         = each.value[0]
+  ip_protocol       = "tcp"
+  from_port         = each.value[1]
+  to_port           = each.value[1]
+}
+
+resource "aws_vpc_security_group_egress_rule" "all" {
+  security_group_id = aws_security_group.al.id
+  cidr_ipv4         = "0.0.0.0/0"
+  ip_protocol       = "-1"
+}
+
+resource "aws_instance" "control" {
+  ami                    = data.aws_ami.ubuntu.id
+  instance_type          = var.control_instance_type
+  subnet_id              = aws_subnet.al[var.az].id
+  private_ip             = cidrhost(local.subnet_cidr, 10)
+  vpc_security_group_ids = [aws_security_group.al.id]
+  iam_instance_profile   = aws_iam_instance_profile.nodes.name
+  user_data              = local.user_data
+  root_block_device {
+    volume_size = 100
+    volume_type = "gp3"
+  }
+  metadata_options {
+    http_tokens                 = "required"
+    http_put_response_hop_limit = 2
+  }
+  tags = { Name = "al-control", role = "control" }
+}
+
+# Cluster placement (ADR 007): EC2 puts the GPU VMs close together in one zone.
+# Only for on-demand runs (the timed benchmarks). EC2 reports position
+# (DescribeInstanceTopology) only for some larger types, not g6.2xlarge, so the
+# scheduler topology stays flat on this size.
+locals {
+  cluster = var.cluster_placement && !var.spot
+}
+
+resource "aws_placement_group" "gpu" {
+  count    = local.cluster ? 1 : 0
+  name     = "al-gpu-cluster"
+  strategy = "cluster"
+}
+
+resource "aws_instance" "gpu" {
+  count                  = var.gpu_nodes
+  ami                    = data.aws_ami.ubuntu.id
+  instance_type          = var.gpu_instance_type
+  subnet_id              = aws_subnet.al[var.az].id
+  private_ip             = cidrhost(local.subnet_cidr, 100 + count.index + 1)
+  vpc_security_group_ids = [aws_security_group.al.id]
+  iam_instance_profile   = aws_iam_instance_profile.nodes.name
+  placement_group        = local.cluster ? aws_placement_group.gpu[0].id : null
+  user_data              = local.user_data
+  root_block_device {
+    volume_size = 200
+    volume_type = "gp3"
+  }
+  # The local NVMe instance store (/scratch fast tier) attaches on its own.
+  dynamic "instance_market_options" {
+    for_each = var.spot ? [1] : []
+    content {
+      market_type = "spot"
+      spot_options {
+        instance_interruption_behavior = "stop"
+        spot_instance_type             = "persistent"
+      }
     }
   }
-  dynamic "threshold_rules" {
-    for_each = [0.5, 0.8, 1.0]
-    content { threshold_percent = threshold_rules.value }
+  # Pods reach the node role through IMDS (vLLM weight sync), one hop further away.
+  metadata_options {
+    http_tokens                 = "required"
+    http_put_response_hop_limit = 2
+  }
+  tags = { Name = format("al-gpu-%02d", count.index + 1), role = "gpu" }
+}
+
+# Node role: the durable buckets (storage.tf), and chaos "node loss" stopping
+# and starting pool VMs from the control VM; topology lookups for ADR 007.
+resource "aws_iam_role" "nodes" {
+  name = "al-nodes"
+  assume_role_policy = jsonencode({
+    Version   = "2012-10-17"
+    Statement = [{ Effect = "Allow", Principal = { Service = "ec2.amazonaws.com" }, Action = "sts:AssumeRole" }]
+  })
+}
+
+resource "aws_iam_instance_profile" "nodes" {
+  name = "al-nodes"
+  role = aws_iam_role.nodes.name
+}
+
+resource "aws_iam_role_policy" "chaos" {
+  name = "chaos-and-topology"
+  role = aws_iam_role.nodes.id
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      { Effect = "Allow", Action = ["ec2:DescribeInstances", "ec2:DescribeInstanceTopology"], Resource = "*" },
+      {
+        Effect    = "Allow", Action = ["ec2:StopInstances", "ec2:StartInstances"], Resource = "*"
+        Condition = { StringEquals = { "ec2:ResourceTag/project" = "attestland" } }
+      },
+    ]
+  })
+}
+
+resource "aws_budgets_budget" "al" {
+  count        = length(var.budget_contact_emails) > 0 ? 1 : 0
+  name         = "attestland"
+  budget_type  = "COST"
+  limit_amount = tostring(var.budget_usd)
+  limit_unit   = "USD"
+  time_unit    = "MONTHLY"
+  # The project tag must be activated as a cost allocation tag (runbook).
+  cost_filter {
+    name   = "TagKeyValue"
+    values = ["user:project$attestland"]
+  }
+  dynamic "notification" {
+    for_each = [50, 80, 100]
+    content {
+      comparison_operator        = "GREATER_THAN"
+      threshold                  = notification.value
+      threshold_type             = "PERCENTAGE"
+      notification_type          = "ACTUAL"
+      subscriber_email_addresses = var.budget_contact_emails
+    }
   }
 }

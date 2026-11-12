@@ -2,8 +2,7 @@
 
 This is the one document to read first. It explains what the project is, why it
 exists, the ideas from AI infrastructure you need to follow it, every component,
-and why each one was chosen over the alternatives. It assumes you are a software
-engineer who has never run GPU infrastructure. Terms are defined the first time
+and why each one was chosen over the alternatives. Terms are defined the first time
 they appear and collected in the [glossary](#glossary) at the end.
 
 Other documents go deeper on one thing each: `docs/runbook.md` (commands, in
@@ -25,7 +24,7 @@ per major decision), `network/design-note.md` (network sizing at 64 and 512 GPUs
 
 ## 1. The short version
 
-Attestland (previously named Attested Compute) is a small GPU cluster, built entirely as code, where every
+Attestland is a small GPU cluster, built entirely as code, where every
 training or inference job can end with a **signed job receipt**. A receipt is a
 small JSON file that proves, with signatures from the hardware vendors, which
 machine, which GPU driver, which container image, which model and which input
@@ -38,8 +37,8 @@ machines out of rotation, checkpointing so training survives failures, a
 network lab, monitoring, and failure-injection experiments. Every layer must
 produce a measured number, recorded in a result file, rather than a claim.
 
-It runs on Google Cloud with 4 rented NVIDIA L4 GPUs for most work and 1 NVIDIA
-H100 in a "confidential" VM for the receipts. Everything that does not need a
+It runs on AWS with 4 rented NVIDIA L4 GPUs for most work and on Azure with 1
+NVIDIA H100 in a "confidential" VM for the receipts. Everything that does not need a
 GPU also runs and is tested on a laptop.
 
 ## 2. Why the project exists
@@ -156,8 +155,8 @@ do the same for GPU memory and for data moving between CPU and GPU.
 **Attestation** is how you learn, from outside, that a machine really is in that
 state. The hardware produces a report describing itself (firmware versions,
 security settings, a hash of what booted), signed by a key burned into the chip.
-A verification service run by the vendor (Google for the CPU here, NVIDIA for the
-GPU) checks that report and returns a signed token. If you put your own random
+A verification service run by the vendor (Microsoft Azure Attestation for the CPU
+here, NVIDIA for the GPU) checks that report and returns a signed token. If you put your own random
 value (a **nonce**) into the request, the token proves the attestation was made
 for your request and is not a replay of an old one. Receipts are built on
 exactly this.
@@ -165,24 +164,24 @@ exactly this.
 ## 4. Architecture at a glance
 
 ```
-                       laptop (no cloud)                         Google Cloud project
-  ┌──────────────────────────────────────────┐   ┌─────────────────────────────────────────────────────┐
-  │ network lab (containerlab: SR Linux/FRR) │   │  GPU pool (phases 2-4)        confidential pool (5) │
-  │ unit + integration tests (Go, Python)    │   │  4 x g2-standard-8 (1 L4)     1 x a3-highgpu-1g     │
-  │ receipt issue/verify on a test platform  │   │  + control VM + 4 GCS buckets  (TDX + H100, CC on)   │
-  └──────────────────────────────────────────┘   │                               + non-CC twin         │
-                                                  └─────────────────────────────────────────────────────┘
+                       laptop (no cloud)                   AWS us-east-1                 Azure eastus2
+  ┌──────────────────────────────────────────┐   ┌───────────────────────────┐   ┌────────────────────────────┐
+  │ network lab (containerlab: SR Linux/FRR) │   │  GPU pool (phases 2-4)    │   │  confidential pool (5)     │
+  │ unit + integration tests (Go, Python)    │   │  4 x g6.2xlarge (1 L4)    │   │  1 x NCC40ads_H100_v5      │
+  │ receipt issue/verify on a test platform  │   │  + control VM + 4 S3      │   │  (SEV-SNP + H100, CC on)   │
+  └──────────────────────────────────────────┘   │    buckets                │   │  + non-CC twin             │
+                                                  └───────────────────────────┘   └────────────────────────────┘
 
   Layers inside the GPU pool (each is a directory in the repo):
 
   7 receipts        alissue in the confidential VM  ->  receipt.json  ->  alverify anywhere
   6 observability   Prometheus, Grafana, Loki, Alertmanager  |  chaos injection, goodput experiment
-  5 storage         node-local NVMe (fast)  ->  Cloud Storage buckets (durable)  |  checkpoints
+  5 storage         node-local NVMe (fast)  ->  S3 buckets (durable)  |  checkpoints
   4 workloads       GPT-2 training (PyTorch DDP)  |  vLLM model server
   3 scheduling      Slurm (training)  <-- pool-move -->  Kubernetes + Kueue (serving)
                     topology-aware placement in both (block / sub-block / host)
   2 network         one VPC, jumbo frames; lab fabric and 64/512-GPU design off-cloud
-  1 fleet           Packer image -> burn-in -> in service -> healthd drains on faults
+  1 fleet           Ansible install -> burn-in -> in service -> healthd drains on faults
   0 infrastructure  OpenTofu (VMs, network, budgets) + Ansible (configuration) + reaper
 ```
 
@@ -192,10 +191,10 @@ A training job's life, end to end:
 2. Each GPU node runs **burn-in**, about 25 minutes of hardware tests, and only
    joins a scheduler if every test passes.
 3. The researcher submits `sbatch -N 2 train.sbatch`. Slurm picks 2 nodes that
-   are close together in Google's data centre (the topology step) and starts the
-   container on both.
+   are close together in the data centre (the topology step, when the cloud
+   reports positions) and starts the container on both.
 4. The training script checkpoints to local NVMe and copies each checkpoint to
-   a Cloud Storage bucket.
+   an S3 bucket.
 5. If a GPU throws a fatal error, `healthd` sees it within seconds in the
    monitoring data, drains the node in Slurm, and opens an incident. Slurm
    requeues the job, which resumes from the last checkpoint on a healthy node.
@@ -216,13 +215,12 @@ why it was picked. Where a decision record exists, it is cited as ADR NNN.
 
 | Component | What it is | Why this choice |
 | --- | --- | --- |
-| **Google Cloud**, one project | Where every VM runs | One account, one quota process, one budget, one cleanup identity. GCP rents single-L4 VMs cheaply for the GPU pool and has a confidential H100 VM for receipts. AWS is the second choice for the GPU pool; it sells no confidential GPU, so confidential receipts are GCP-only (ADR 006). |
+| **AWS** (GPU pool) and **Azure** (confidential pool) | Where the VMs run | AWS rents single-L4 VMs (`g6.2xlarge`) and had GPU quota when GCP's was blocked. AWS sells no confidential GPU, so the confidential H100 VM runs on Azure, which offers it on-demand with documented attestation. Two clouds mean two accounts, budgets and reaper passes (ADR 010). |
 | **OpenTofu** (`infra/`) | Declares VMs, networks, firewalls and budgets as code, like Terraform | Same language and providers as Terraform under an open-source licence. Creating and destroying the whole cluster per working session is what keeps costs down, so it must be one command. |
-| **Packer** (`infra/packer/`) | Builds a VM disk image with the GPU software preinstalled | Installing the driver, CUDA and Slurm takes 20 to 40 minutes. Doing it once into an image saves that time, at GPU prices, on every node start. |
-| **Ansible** (`ansible/`, 27 roles) | Configures the VMs over SSH after they exist | Needs no agent on the machines and handles a handful of VMs well. Each role does one thing (driver, Slurm, Kubernetes, monitoring), so the same roles build the image and configure live nodes. |
-| **`versions.env`** | Every pinned version in one file | GPU stacks break on version mismatch. One file feeds Make, Ansible, Packer and the benchmarks, and every result file records it, so any number can be traced to exact versions. |
+| **Ansible** (`ansible/`, 29 roles) | Configures the VMs over SSH after they exist | Needs no agent on the machines and handles a handful of VMs well. Each role does one thing (driver, Slurm, Kubernetes, monitoring) and skips work already done, so re-running it on a live node is safe. |
+| **`versions.env`** | Every pinned version in one file | GPU stacks break on version mismatch. One file feeds Make, Ansible and the benchmarks, and every result file records it, so any number can be traced to exact versions. |
 | **8-hour reaper** (`infra/reaper/`) | A scheduled GitHub Action that deletes old project VMs | A forgotten GPU VM costs real money overnight. Anything older than 8 hours without `keep=true` is deleted. |
-| **Ubuntu 22.04** | Operating system on every VM | Google lists Ubuntu 22.04 (and newer) as an official image for its confidential H100 VMs but does not yet name 24.04 for them, and NVIDIA's GPU Operator supports 22.04, 24.04 and 26.04. Standard security support for 22.04 ends in May 2027, so a move to 24.04 is planned (ADR 009). |
+| **Ubuntu 22.04** | Operating system on every VM | Azure's confidential GPU VMs use Canonical's 22.04 confidential image, the confidential VM and its twin must match, and NVIDIA's GPU Operator supports 22.04. Standard security support for 22.04 ends in May 2027, so a move to 24.04 is planned (ADR 009). |
 
 ### 5.1 Fleet: getting machines into service and out of it
 
@@ -238,7 +236,7 @@ service, draining, drained, in repair. The state is stored in both schedulers
 | controller-runtime | The Go library Kubernetes controllers are built on | Gives healthd a standard reconcile loop and fake clients for tests; 21 tests run without a cluster. |
 | **Provisioning simulation** (`fleet/provisioning/`) | Blank VMs on a Linux host, booted over the network and installed automatically through a fake server-management API (Redfish, via sushy-tools) and Tinkerbell | Real data centres install bare-metal servers this way. Cloud VMs skip it, so a simulation is the only way to exercise it without hardware. |
 
-**Network health rules (from dc-orch).** healthd also watches the network cards:
+**Network health rules.** healthd also watches the network cards:
 a data network card that goes down, or a link that keeps flapping, stops new
 work on that node. The rules target secondary network cards, the ones larger
 GPU machines use to connect each GPU to the network ("rails", section 5.2). On
@@ -249,13 +247,13 @@ makes the node unreachable, which Kubernetes and Slurm already treat as down.
 
 | Component | What it is | Why this choice |
 | --- | --- | --- |
-| **VPC with jumbo frames** | The cloud network for the GPU pool, with 8,896-byte packets | Bigger packets mean fewer per-packet costs for all-reduce over TCP, which is all the L4 VMs have. |
+| **VPC with jumbo frames** | The cloud network for the GPU pool, with 9,001-byte packets (the AWS default inside a VPC) | Bigger packets mean fewer per-packet costs for all-reduce over TCP, which is all the L4 VMs have. |
 | **Network lab** (`network/containerlab/`) | A data-centre network running in containers on a laptop: 2 spine switches, 4 leaf switches, test hosts | Real data-centre networks are configured as code and tested before changes reach production. containerlab runs real switch software in containers, so routing configs can be tested like code. |
 | **SR Linux, FRR as fallback** | The switch operating systems in the lab | Nokia's SR Linux is free to run in a container and implements the protocols used in real AI data centres. It crashes on macOS Docker, so the same configs are also rendered for FRR, an open-source router (ADR 004). |
 | **eBGP underlay, EVPN/VXLAN overlay** | Routing between switches, plus virtual networks on top | The standard design for modern data-centre fabrics: every switch link is routed (no single big broadcast domain), traffic spreads over all equal paths, and tenants get isolated virtual networks. The lab tests check routing, isolation, path spreading and how fast traffic recovers when a link fails (0.2 s measured). |
 | **Rail-optimised lab topology** | A second lab fabric where GPU *n* of every server connects to switch *n* | Large GPU clusters wire servers this way so that the same-numbered GPUs across servers, which talk most during all-reduce, are one switch hop apart. |
 | **Design note** (`network/design-note.md`) | Switch counts, link counts, bottlenecks and failure domains for 64 and 512 GPUs | The rented cluster is too small to show these problems, so the note reasons about them with stated assumptions. |
-| **NCCL benchmark** (`bench/nccl/`) | Measures all-reduce bandwidth between GPUs, over TCP and RDMA | This is the number that sets the ceiling on multi-node training speed. RDMA (network cards writing directly into another machine's memory) needs a provider that offers it on small VMs, which is still an open dependency. |
+| **NCCL benchmark** (`bench/nccl/`) | Measures all-reduce bandwidth between GPUs, over TCP and RDMA | This is the number that sets the ceiling on multi-node training speed. RDMA (network cards writing directly into another machine's memory) is not available on g6.2xlarge; on AWS it means EFA, which starts at g6.8xlarge (ADR 010). |
 
 ### 5.3 Scheduling
 
@@ -273,20 +271,21 @@ discovery, health probes or rolling updates for serving).
 | --- | --- | --- |
 | **Slurm 25.05**, built from source | The batch scheduler for training | Gang allocation, whole-node jobs, requeue on failure with a warning signal before pre-emption, accounting, and placement by network topology. Built from source because distribution packages lag and lack the REST API (with JWT auth) that healthd uses. |
 | **Pyxis + Enroot** | Lets Slurm jobs run containers, without root | Training uses NVIDIA's PyTorch container; Enroot runs it unprivileged and Pyxis adds `--container-image` to `srun`. Docker's root daemon is not wanted on shared batch nodes. |
-| **Kubernetes 1.34 via kubeadm** | The service scheduler for inference | A managed service (GKE) owns its nodes. Here the same VM must be able to leave Kubernetes and join Slurm, so the cluster is self-managed. |
+| **Kubernetes 1.34 via kubeadm** | The service scheduler for inference | A managed service (EKS, AKS) owns its nodes. Here the same VM must be able to leave Kubernetes and join Slurm, so the cluster is self-managed. |
 | **NVIDIA GPU Operator**, partly disabled | Makes GPUs visible to Kubernetes (device plugin, GPU labels) | The driver, container toolkit and GPU exporter stay on the host, because Slurm uses them too; two copies would conflict (ADR 005). |
 | **Kueue 0.14** | A job queue on top of Kubernetes: quotas, priorities, all-or-nothing admission | Plain Kubernetes starts pods as soon as any fit. Kueue holds a job until all its pods fit, enforces the GPU quota of the Kubernetes pool, and lets serving pre-empt batch evaluation. |
 | **pool-move** (`sched/pool-move.sh`) | Moves a node between schedulers | One command, refuses to move a node healthd has drained, and updates the Kueue GPU quota to match the new pool size. |
 
-**Topology-aware placement (merged from dc-orch).** Section 3 explained why a
-multi-node job should run on machines that are close together. Google does not
-normally say where a VM physically sits, but VMs created in a **compact
-placement policy** are placed close together and can read their position from
-the metadata server: a *block*, a *sub-block* and a *host*. The project uses that
-in three steps, all from the same data:
+**Topology-aware placement.** Section 3 explained why a
+multi-node job should run on machines that are close together. VMs in an EC2
+**cluster placement group** are placed close together, and for some instance
+types EC2 also reports where each sits: the network nodes above it, read as a
+*block* and a *sub-block*. It does not report this for g6.2xlarge, so on today's
+pool every node is `unknown`; the plumbing is ready for a type that has it. The
+project uses that data in three steps:
 
-1. The GPU pool is created in a compact placement policy for timed (on-demand)
-   runs. Spot runs skip it, because that combination is not documented.
+1. The GPU pool is created in a cluster placement group for timed (on-demand)
+   runs.
 2. Ansible reads each node's position and `fleet/topology/topology.py` turns it
    into node labels (`fleet.attestland/topology-block`,
    `fleet.attestland/topology-subblock`) and a Slurm `topology.conf`. A node with
@@ -298,15 +297,10 @@ in three steps, all from the same data:
    a job asks for this with a pod annotation, and single-pod services such as
    vLLM say they have no constraint.
 
-This came from **dc-orch**, a separate prototype that wrote its own Kubernetes
-scheduler plugin to keep a job inside one group of servers, tested on a laptop
-with fake GPUs. The idea moved here; the plugin did not. Kueue's built-in
-topology placement does the same job, also handles all-or-nothing admission,
-and is already deployed, so maintaining a custom scheduler would add cost with
-no cloud benefit. On today's 4 single-GPU L4 VMs the effect is small, because
-they are likely to sit close together anyway. It matters on multi-GPU machines
-and at the 64- and 512-GPU sizes in the design note, and the plumbing is the same
-(ADR 007).
+Kueue's built-in topology placement is used instead of a custom scheduler
+plugin: it also handles all-or-nothing admission and is already deployed. The
+plumbing matters on multi-GPU machines and at the 64- and 512-GPU sizes in the
+design note (ADR 007).
 
 ### 5.4 Workloads
 
@@ -325,8 +319,8 @@ and at the 64- and 512-GPU sizes in the design note, and the plumbing is the sam
 | Component | What it is | Why this choice |
 | --- | --- | --- |
 | **Node-local NVMe** (`/scratch`) | Fast disk inside each GPU VM | Saving to local disk takes seconds, so the training pause is short. It disappears with the VM, so it is only the first copy. |
-| **Cloud Storage buckets** (`infra/gpu-pool/storage.tf`) | Google's object store, used through its S3-compatible API | The durable copy of checkpoints, datasets, models and receipts. There is no storage server to run or patch. It replaced MinIO, whose community edition is archived (ADR 008). |
-| **PyTorch Distributed Checkpoint (DCP)** | Saves and loads distributed training state | The native PyTorch format, and it can save in the background. Each node keeps a full copy, so a surviving node restores from its own disk and a replacement node downloads from Cloud Storage. |
+| **S3 buckets** (`infra/gpu-pool/storage.tf`) | AWS's object store | The durable copy of checkpoints, datasets, models and receipts. There is no storage server to run or patch, and nodes use their instance role, so there are no keys to leak. It replaced MinIO, whose community edition is archived (ADR 008, ADR 010). |
+| **PyTorch Distributed Checkpoint (DCP)** | Saves and loads distributed training state | The native PyTorch format, and it can save in the background. Each node keeps a full copy, so a surviving node restores from its own disk and a replacement node downloads from S3. |
 | **Young–Daly interval** (`storage/interval.py`) | Computes how often to checkpoint | Uses the measured save time and a failure rate to pick the interval that wastes the least time; the result feeds the goodput experiment. |
 
 ### 5.6 Observability and reliability
@@ -344,14 +338,14 @@ and at the 64- and 512-GPU sizes in the design note, and the plumbing is the sam
 
 | Component | What it is | Why this choice |
 | --- | --- | --- |
-| **GCP `a3-highgpu-1g` confidential VM** | 1 H100 GPU, Intel TDX for CPU memory, NVIDIA confidential mode for GPU memory | Keeps everything in one cloud (ADR 006). Only Spot or flex-start capacity is offered, so runs must tolerate being stopped. A twin VM of the same type with confidential mode off measures what confidential computing costs. |
-| **Google Cloud Attestation** via `gotpm` | Turns the CPU's TDX report into a token signed by Google, carrying our nonce | A signed token can be checked offline with Google's published keys. The raw TDX report is also stored in the receipt for a future verifier. Risk: Google documents this for C3 machines, not yet for A3, so it is the first thing the bring-up checks. |
+| **Azure `Standard_NCC40ads_H100_v5` confidential VM** | 1 H100 NVL GPU, AMD SEV-SNP for CPU memory, NVIDIA confidential mode for GPU memory | Offered on-demand with documented attestation; AWS has no confidential GPU (ADR 010). A twin `Standard_NC40ads_H100_v5` with the same GPU and confidential mode off measures what confidential computing costs. |
+| **Microsoft Azure Attestation** via `AttestationClient` | Turns the CPU's SEV-SNP report (read through the vTPM) into a token signed by Microsoft, carrying our nonce | A signed token can be checked offline with the attestation service's published keys, and it carries the launch measurement of the VM image, which the policy pins. |
 | **NVIDIA NRAS** via `nvattest` | Turns the GPU's report into a token signed by NVIDIA, with driver and firmware versions | NVIDIA-signed means the GPU claim does not depend on the machine's operator. A local verifier exists but its results are unsigned, so the policy rejects them by default. |
 | **Nonce binding** | SHA-256 of the model, input and output hashes, the image digest and a public key generated inside the VM for this job | Both attestations carry this one value, so they vouch for this job's content and this key, and that key signs the receipt. An attestation copied from another receipt fails the check. |
 | **Canonical JSON (RFC 8785) + ECDSA P-256** | How the receipt is serialised and signed | JSON has many valid spellings of the same data; the canonical form makes the signed bytes unambiguous. P-256 is supported by every crypto library and hardware key store. |
 | **Sigstore keyless signing** | The CI pipeline signs the container image with a short-lived certificate tied to its GitHub identity, logged publicly | No long-lived signing key to protect or rotate. The verifier checks that the image came from this repository's workflow on `main`. |
 | **`alissue` and `alverify`** (Go) | Issue a receipt inside the VM; verify one anywhere | Go builds one static binary with no runtime to install. `alverify` runs 7 checks (schema, signature, nonce, CPU, GPU, image, content). Six tampering cases must each fail, and do: changed output byte, swapped image, attestation copied from an older receipt, wrong signing key, driver outside policy, body edited after signing. |
-| **Verification policy** (`receipts/policy/`) | A YAML file of trusted keys and allowed values | Separates "what is signed" from "what this verifier accepts", so a verifier can pin driver versions or a project without code changes. It pins Google's token keys and NVIDIA's. |
+| **Verification policy** (`receipts/policy/`) | A YAML file of trusted keys and allowed values | Separates "what is signed" from "what this verifier accepts", so a verifier can pin driver versions or a VM image measurement without code changes. It pins Microsoft's token keys and NVIDIA's. |
 
 ## 6. Decisions that cut across layers
 
@@ -359,10 +353,6 @@ and at the 64- and 512-GPU sizes in the design note, and the plumbing is the sam
   configuration, versions and raw measurements; charts are drawn from those
   files by `make plots`, never by hand. A number that is not in `bench/results/`
   does not appear in any document.
-- **Laptop first.** Everything that does not need a GPU is tested locally: 55
-  Python and 50 Go tests, the network lab, receipt issuing and verification,
-  and checkpointing against an S3 API test server. Cloud time is spent only on what needs
-  hardware.
 - **Short-lived infrastructure.** Each working session runs `make up`, does its
   work and ends with `make down`; budgets alert at 50, 80 and 100%, and the
   reaper deletes stragglers.
@@ -376,9 +366,10 @@ and at the 64- and 512-GPU sizes in the design note, and the plumbing is the sam
 ## 7. Where things stand
 
 All seven layers and five phases are built as code and everything that can run
-on a laptop has run. Nothing has been created in the cloud yet: the next step is
-GPU quota on Google Cloud (L4 for the GPU pool, a preemptible H100 for the
-confidential VM). Of the eight headline numbers, one exists so far (network
+on a laptop has run: 55 Python and 41 Go tests (counting subtests) pass. Nothing
+but a one-VM test launch has run in the cloud yet.
+AWS GPU quota is in place and the Azure H100 quota was granted on 2026-11-10;
+the twin VM still needs Azure SKU access. Of the eight headline numbers, one exists so far (network
 convergence in the lab, 0.2 s). `docs/external-deps.md` lists every external
 dependency with its status and every assumption with how to confirm it, and
 `docs/runbook.md` gives the commands in order.
@@ -389,7 +380,7 @@ dependency with its status and every assumption with how to confirm it, and
 | --- | --- |
 | all-reduce | Every GPU contributes a value and every GPU receives the combined result; the core operation of data-parallel training |
 | attestation | A hardware-signed report of a machine's security state, checked by a vendor service |
-| block / sub-block | Google's groups of physically close machines; VMs in the same sub-block have the shortest network path |
+| block / sub-block | Groups of physically close machines, from the cloud's topology data; VMs in the same sub-block have the shortest network path |
 | burn-in | Hardware tests a node must pass before taking work |
 | checkpoint | A saved copy of a training run's full state, used to resume after a failure |
 | confidential computing (CC) | Hardware memory encryption that hides a VM's data from the host and its operators |

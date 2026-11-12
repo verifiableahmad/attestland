@@ -8,4 +8,3 @@
     name: nvidia-dcgm
     enabled: true
     state: started
-  when: not (image_build | default(false))

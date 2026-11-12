@@ -1,13 +1,13 @@
-# Test-platform policy, GCA-shaped CPU token: pins the keys alissue --platform
+# Test-platform policy, MAA-shaped CPU token: pins the keys alissue --platform
 # test generates (alissue --test-keys policy/test). Never use for real receipts.
 cpu:
   type: test
-  verifier: gca
+  verifier: maa
   issuer: https://test-cpu.attestland.local
   jwks_file: cpu-jwks.json
+  require_compliance: azure-compliant-cvm
   allow_debug: false
-  require:
-    submods.gce.project_id: test-project
+  allowed_launch_measurements: ["a1b2c3000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000"]
 gpu:
   verifier: nras
   issuer: https://test-nras.attestland.local

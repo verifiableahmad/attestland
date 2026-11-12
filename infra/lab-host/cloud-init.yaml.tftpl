@@ -1,0 +1,46 @@
+#cloud-config
+# Lab host: KVM + libvirt for the provisioning simulation, Docker + containerlab
+# for the fabric, k3d + helm + kubectl for the Tinkerbell stack. Versions come
+# from versions.env. Done when /var/lib/al-lab-ready exists.
+users:
+  - default
+  - name: ${ssh_user}
+    sudo: ALL=(ALL) NOPASSWD:ALL
+    shell: /bin/bash
+    ssh_authorized_keys:
+      - ${ssh_public_key}
+
+package_update: true
+packages:
+  - qemu-kvm
+  - libvirt-daemon-system
+  - libvirt-clients
+  - virtinst
+  - qemu-utils
+  - docker.io
+  - apache2-utils # htpasswd for the Redfish emulator
+  - jq
+  - make
+  - git
+  - rsync
+  - python3-venv
+  - python3-pip
+
+# containerlab runs many SR Linux and FRR containers; raise the inotify limits.
+write_files:
+  - path: /etc/sysctl.d/90-al-lab.conf
+    content: |
+      fs.inotify.max_user_instances = 8192
+      fs.inotify.max_user_watches = 1048576
+
+runcmd:
+  - sysctl --system
+  # Groups exist only once the packages are in, so not in users: above.
+  - usermod -aG docker,libvirt,kvm ${ssh_user}
+  - systemctl enable --now docker libvirtd
+  - bash -c "$(curl -sL https://get.containerlab.dev)" -- -v ${containerlab}
+  - curl -fsSL -o /usr/local/bin/k3d https://github.com/k3d-io/k3d/releases/download/${k3d}/k3d-linux-amd64
+  - curl -fsSL -o /usr/local/bin/kubectl https://dl.k8s.io/release/v${kubectl}/bin/linux/amd64/kubectl
+  - curl -fsSL https://get.helm.sh/helm-${helm}-linux-amd64.tar.gz | tar -xz -C /usr/local/bin --strip-components=1 linux-amd64/helm
+  - chmod +x /usr/local/bin/k3d /usr/local/bin/kubectl
+  - test -e /dev/kvm && touch /var/lib/al-lab-ready

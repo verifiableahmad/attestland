@@ -7,4 +7,5 @@
   ansible.builtin.command: "/opt/al/bringup/cc-bringup.sh"
   environment:
     VLLM_RECEIPTS_IMAGE: "{{ vllm_receipts_image }}"
+    MAA_URL: "{{ maa_url }}"
   changed_when: true

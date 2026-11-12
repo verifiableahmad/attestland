@@ -1,21 +1,20 @@
-# Production verification policy (GCP a3-highgpu-1g: Intel TDX + H100 in CC
-# mode, Google Cloud Attestation, NVIDIA NRAS). Every REPLACE value must be
-# captured from the real platform before use.
+# Production verification policy (Azure Standard_NCC40ads_H100_v5: AMD SEV-SNP +
+# H100 NVL in CC mode, Microsoft Azure Attestation, NVIDIA NRAS; ADR 010). Every
+# REPLACE value must be captured from the real platform before use.
 cpu:
-  type: tdx
-  verifier: gca
-  issuer: https://confidentialcomputing.googleapis.com
-  jwks_file: gca-jwks.json                                # pinned copy of the jwks_uri in <issuer>/.well-known/openid-configuration
-  allow_debug: false                                      # built-in checks: hwmodel=GCP_INTEL_TDX, secboot=true, dbgstat=disabled-since-boot
-  require:
-    aud: attestland-receipts                        # = alissue --gca-audience
-    submods.gce.project_id: REPLACE-gcp-project-id        # only receipts from our project; confirm the claim on the first token
+  type: sev-snp
+  verifier: maa
+  issuer: https://sharedeus2.eus2.attest.azure.net        # MAA instance the issuer used (= alissue --maa-url)
+  jwks_file: maa-jwks.json                                # pinned copy of <issuer>/certs
+  require_compliance: azure-compliant-cvm
+  allow_debug: false                                      # built-in checks: attestation-type=sevsnpvm, is-debuggable=false
+  allowed_launch_measurements: []                         # REPLACE: measurement(s) of the qualified CVM image
 gpu:
   verifier: nras
   issuer: https://nras.attestation.nvidia.com
   jwks_file: nras-jwks.json                               # pinned copy of https://nras.attestation.nvidia.com/.well-known/jwks.json
   allowed_driver_versions: ["580.82.07"]                  # = versions.env NVIDIA_DRIVER_VERSION
-  allowed_vbios_versions: []                              # REPLACE: VBIOS of the H100 in the pool
+  allowed_vbios_versions: []                              # REPLACE: VBIOS of the H100 NVL in the pool
   claims:
     cc_mode: ""                                           # confirm NRAS claim for CC mode, then set
 image:

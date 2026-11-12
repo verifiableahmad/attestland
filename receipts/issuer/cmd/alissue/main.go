@@ -3,7 +3,7 @@
 //	alissue --job-id bench-001 --model-dir /models/current --model-name al-gpt-124m \
 //	  --inputs requests.jsonl --outputs responses.jsonl \
 //	  --image ghcr.io/org/vllm-receipts@sha256:... --bundle provenance.sigstore.json \
-//	  --platform gcp --out ./receipt-001
+//	  --platform azure --maa-url https://sharedeus2.eus2.attest.azure.net --out ./receipt-001
 package main
 
 import (
@@ -32,11 +32,10 @@ func main() {
 		outputs   = flag.String("outputs", "", "responses JSONL")
 		image     = flag.String("image", "", "image reference pinned by @sha256:")
 		bundle    = flag.String("bundle", "", "Sigstore bundle of the image provenance")
-		platform  = flag.String("platform", "gcp", "gcp|test")
+		platform  = flag.String("platform", "azure", "azure|test")
 		vmSize    = flag.String("vm-size", "", "VM size (default: the platform's confidential VM)")
-		gotpmBin  = flag.String("gotpm", "gotpm", "go-tpm-tools gotpm CLI (gcp)")
-		gcaAud    = flag.String("gca-audience", "attestland-receipts", "aud claim of the GCA token (gcp)")
-		tdxQuote  = flag.Bool("tdx-quote", true, "also embed a raw TDX quote over the nonce (gcp)")
+		maaURL    = flag.String("maa-url", os.Getenv("MAA_URL"), "Microsoft Azure Attestation URL (azure)")
+		maaBin    = flag.String("attestation-client", "AttestationClient", "Azure guest attestation client (azure)")
 		nvatBin   = flag.String("nvattest", "nvattest", "NVIDIA nvattest CLI")
 		nvatVer   = flag.String("nvat-version", os.Getenv("NVAT_VERSION"), "recorded in the receipt")
 		gpuVerif  = flag.String("gpu-verifier", "remote", "remote (NRAS) | local")
@@ -60,14 +59,10 @@ func main() {
 	}
 	is := &issuer.Issuer{}
 	switch *platform {
-	case "gcp":
-		g := &evidence.GoogleCA{Binary: *gotpmBin, Audience: *gcaAud}
-		if *tdxQuote {
-			g.Quote = &evidence.TDXConfigFS{}
-		}
-		is.CPU = g
+	case "azure":
+		is.CPU = &evidence.AzureMAA{Binary: *maaBin, MAAURL: *maaURL}
 		is.GPU = &evidence.NVAT{Binary: *nvatBin, Verifier: *gpuVerif, Version: *nvatVer}
-		defaultSize(vmSize, "a3-highgpu-1g")
+		defaultSize(vmSize, "Standard_NCC40ads_H100_v5")
 	case "test":
 		tp, err := evidence.NewTestPlatform(*testKeys)
 		if err != nil {
@@ -80,7 +75,7 @@ func main() {
 	}
 	r, err := is.Issue(context.Background(), issuer.Request{
 		JobID: *jobID, Kind: *kind, Scheduler: *sched, StartedAt: ts(*started), FinishedAt: ts(*finished),
-		Cloud: map[string]string{"gcp": "gcp", "test": "test"}[*platform], VMSize: *vmSize,
+		Cloud: map[string]string{"azure": "azure", "test": "test"}[*platform], VMSize: *vmSize,
 		Image: *image, Bundle: b, ModelName: *modelName, ModelDir: *modelDir,
 		Inputs: *inputs, Outputs: *outputs, OutDir: *out,
 	})

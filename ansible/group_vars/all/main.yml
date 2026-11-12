@@ -10,11 +10,9 @@ slurm_jwt_key_b64: "{{ lookup('env', 'AL_SLURM_JWT_KEY_B64') }}"
 k8s_pod_cidr: 192.168.0.0/16
 k8s_service_cidr: 10.96.0.0/12
 
-# Durable tier: Cloud Storage through its S3 interoperability API (ADR 008). The HMAC key and
-# bucket prefix come from the inventory (tofu output); AL_S3_* overrides them.
-s3_endpoint: "{{ lookup('env', 'AL_S3_ENDPOINT') | default(hostvars[inventory_hostname].s3_endpoint | default('https://storage.googleapis.com'), true) }}"
-s3_access_key: "{{ lookup('env', 'AL_S3_ACCESS_KEY') | default(hostvars[inventory_hostname].s3_access_key | default(''), true) }}"
-s3_secret_key: "{{ lookup('env', 'AL_S3_SECRET_KEY') | default(hostvars[inventory_hostname].s3_secret_key | default(''), true) }}"
+# Durable tier: S3 buckets (ADR 010). Nodes reach them with their instance role, so
+# there are no keys; the region and bucket prefix come from the inventory (tofu output).
+s3_region: "{{ al_region | default('us-east-1') }}"
 bucket_prefix: "{{ lookup('env', 'AL_BUCKET_PREFIX') | default(hostvars[inventory_hostname].bucket_prefix | default(''), true) }}"
 
 grafana_admin_password: "{{ lookup('env', 'AL_GRAFANA_PASSWORD') | default('change-me-grafana', true) }}"

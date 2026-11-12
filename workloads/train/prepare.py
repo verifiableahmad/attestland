@@ -60,7 +60,7 @@ def tokens_synthetic(limit: int, seed: int = 0) -> np.ndarray:
 
 
 def upload(out: Path, dest: str) -> None:
-    """Upload shards and manifest to the durable bucket (AL_S3_* env), e.g. dest=s3://datasets/fineweb-edu-2b."""
+    """Upload shards and manifest to the durable bucket (AL_S3_* / AL_BUCKET_PREFIX env), e.g. dest=s3://datasets/fineweb-edu-2b."""
     from ckpt import S3Store
     store = S3Store(dest)
     for f in sorted(out.iterdir()):

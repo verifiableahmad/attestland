@@ -62,31 +62,30 @@ class SaveStats:
     error: str | None = None
 
 
-# Recent boto3 adds CRC checksum headers to every upload by default; Google's S3
-# interoperability API rejects them, so send checksums only when an operation requires one.
-_CHECKSUM_WHEN_REQUIRED = {"request_checksum_calculation": "when_required",
-                           "response_checksum_validation": "when_required"}
+def _s3_settings() -> dict:
+    """Endpoint, region and keys from AL_S3_* when set. On the pool only the region is set:
+    S3 itself, with credentials from the node's instance role (ADR 010). Tests point
+    AL_S3_ENDPOINT and the keys at a local S3 server."""
+    out = {"endpoint_url": os.environ.get("AL_S3_ENDPOINT") or None,
+           "region_name": os.environ.get("AL_S3_REGION") or None}
+    if os.environ.get("AL_S3_ACCESS_KEY"):
+        out["aws_access_key_id"] = os.environ["AL_S3_ACCESS_KEY"]
+        out["aws_secret_access_key"] = os.environ["AL_S3_SECRET_KEY"]
+    return out
 
 
 class S3Store:
-    """Durable bucket access with boto3 over the S3 API (Google Cloud Storage's interoperability
-    endpoint in production). Env AL_S3_ENDPOINT / AL_S3_ACCESS_KEY / AL_S3_SECRET_KEY (an HMAC key)."""
+    """Durable bucket access with boto3 over the S3 API."""
 
     def __init__(self, uri: str):
         import boto3
-        from botocore.config import Config
         assert uri.startswith("s3://"), uri
         self.bucket, _, self.prefix = uri[5:].partition("/")
-        # Cloud Storage bucket names are global: logical "checkpoints" is <AL_BUCKET_PREFIX>-checkpoints.
+        # S3 bucket names are global: logical "checkpoints" is <AL_BUCKET_PREFIX>-checkpoints.
         if os.environ.get("AL_BUCKET_PREFIX"):
             self.bucket = f"{os.environ['AL_BUCKET_PREFIX']}-{self.bucket}"
         self.uri = f"s3://{self.bucket}/{self.prefix}".rstrip("/")
-        self.s3 = boto3.client(
-            "s3", endpoint_url=os.environ["AL_S3_ENDPOINT"],
-            aws_access_key_id=os.environ["AL_S3_ACCESS_KEY"],
-            aws_secret_access_key=os.environ["AL_S3_SECRET_KEY"],
-            region_name=os.environ.get("AL_S3_REGION", "auto"),
-            config=Config(**_CHECKSUM_WHEN_REQUIRED))
+        self.s3 = boto3.client("s3", **_s3_settings())
 
     def key(self, *parts: str) -> str:
         return "/".join(p.strip("/") for p in (self.prefix, *parts) if p)
@@ -113,10 +112,11 @@ class S3Store:
 
 
 def _fsspec_opts() -> dict:
-    return {"client_kwargs": {"endpoint_url": os.environ["AL_S3_ENDPOINT"],
-                              "region_name": os.environ.get("AL_S3_REGION", "auto")},
-            "config_kwargs": dict(_CHECKSUM_WHEN_REQUIRED),
-            "key": os.environ["AL_S3_ACCESS_KEY"], "secret": os.environ["AL_S3_SECRET_KEY"]}
+    st = _s3_settings()
+    opts: dict[str, Any] = {"client_kwargs": {"endpoint_url": st["endpoint_url"], "region_name": st["region_name"]}}
+    if "aws_access_key_id" in st:
+        opts.update(key=st["aws_access_key_id"], secret=st["aws_secret_access_key"])
+    return opts
 
 
 class CheckpointManager:

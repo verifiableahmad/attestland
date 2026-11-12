@@ -62,9 +62,10 @@ rules:
     action: drain_after_jobs
     description: Rank consistently slower than the median rank.
   # Network rules (from dc-orch, ADR 007). They watch secondary NICs: the GPU
-  # "rail" NICs of multi-NIC machines (A3: GPU NICs after the primary ens4/eth0).
-  # The primary NIC carries the scrape, so its loss shows up as a down node
-  # instead. On single-NIC g2 VMs these rules never fire.
+  # "rail" NICs of multi-NIC machines. On EC2 the primary ENA NIC is often ens5,
+  # which the pattern also matches; that is harmless, because the primary NIC
+  # carries the scrape, so its loss shows up as a down node instead. On
+  # single-NIC g6.2xlarge VMs these rules never fire.
   - name: rail-link-down
     severity: warning
     expr: node_network_up{device=~"ens([5-9]|[1-9][0-9])|eth[1-9][0-9]*"} == 0

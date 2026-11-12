@@ -1,0 +1,4 @@
+subscription_id      = "REPLACE-00000000-0000-0000-0000-000000000000"
+tenant_id            = "REPLACE-00000000-0000-0000-0000-000000000000"
+aws_region           = "us-east-1"
+create_oidc_provider = true # false if IAM already lists token.actions.githubusercontent.com

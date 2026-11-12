@@ -1,6 +1,6 @@
 # ADR 006: Google Cloud for every pool; AWS second; Azure removed
 
-- Status: accepted
+- Status: superseded by ADR 010 (GCP L4 quota was blocked; the GPU pool is on AWS, the confidential pool on Azure)
 - Date: 2026-11-08
 - Phase / section: Phases 2–5, spec 7.2–7.7
 

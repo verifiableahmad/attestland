@@ -1,8 +1,7 @@
-project_id          = "REPLACE-gcp-project-id"
-project_number      = "REPLACE-123456789012"
-billing_account_id  = "REPLACE-000000-000000-000000"
-admin_cidrs         = ["REPLACE.your.ip.addr/32"]
-spot                = true # false for timed benchmarks
-phase               = 2
-ssh_public_key_path = "~/.ssh/id_ed25519.pub"
-# gpu_image         = "projects/REPLACE/global/images/family/al-gpu-ubuntu-2204"
+region                = "us-east-1"
+az                    = "us-east-1a" # another of var.azs if this zone has no g6 capacity
+admin_cidrs           = ["REPLACE.your.ip.addr/32"]
+spot                  = false        # true needs G spot quota (0 today); false for timed benchmarks
+phase                 = 2
+ssh_public_key_path   = "~/.ssh/id_ed25519.pub"
+budget_contact_emails = ["REPLACE@example.com"]

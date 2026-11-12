@@ -22,15 +22,18 @@ type Policy struct {
 type CPUPolicy struct {
 	Type string `yaml:"type"` // tdx | sev-snp | test; must equal the receipt's cpu_tee.type
 	// Verifier is the attestation service whose token the receipt carries:
-	// gca (Google Cloud Attestation, the default and only one).
+	// maa (Microsoft Azure Attestation, the default and only one).
 	Verifier string `yaml:"verifier"`
-	// Token issuer and its signing keys (JWKS file, pinned here: GCA's jwks_uri
-	// from its openid-configuration).
-	Issuer     string `yaml:"issuer"`
-	JWKSFile   string `yaml:"jwks_file"`
-	AllowDebug bool   `yaml:"allow_debug"`
+	// Token issuer and its signing keys (JWKS file, pinned here: <MAA URL>/certs).
+	Issuer   string `yaml:"issuer"`
+	JWKSFile string `yaml:"jwks_file"`
+	// Allowed SEV-SNP launch measurements (hex) of the qualified CVM image.
+	// Empty list = any.
+	AllowedLaunchMeasurements []string `yaml:"allowed_launch_measurements"`
+	RequireCompliance         string   `yaml:"require_compliance"` // e.g. azure-compliant-cvm
+	AllowDebug                bool     `yaml:"allow_debug"`
 	// Require maps extra claim paths to exact values, on top of the verifier's
-	// built-in checks (e.g. submods.gce.project_id: my-project).
+	// built-in checks (e.g. x-ms-azurevm-vmid: <VM id>).
 	Require map[string]string `yaml:"require"`
 	// Claim paths (dot separated). Defaults depend on Verifier.
 	Claims CPUClaims `yaml:"claims"`
@@ -39,7 +42,8 @@ type CPUPolicy struct {
 }
 
 type CPUClaims struct {
-	Nonce string `yaml:"nonce"`
+	Nonce             string `yaml:"nonce"`
+	LaunchMeasurement string `yaml:"launch_measurement"`
 }
 
 type GPUPolicy struct {
@@ -85,8 +89,8 @@ func LoadPolicy(path string) (*Policy, error) {
 		return nil, err
 	}
 	p.defaults()
-	if v := p.CPU.Verifier; v != "gca" {
-		return nil, fmt.Errorf("cpu.verifier %q: want gca", v)
+	if v := p.CPU.Verifier; v != "maa" {
+		return nil, fmt.Errorf("cpu.verifier %q: want maa", v)
 	}
 	return p, nil
 }
@@ -98,16 +102,19 @@ func (p *Policy) defaults() {
 		}
 	}
 	c := &p.CPU
-	def(&c.Verifier, "gca")
+	def(&c.Verifier, "maa")
 	c.checks = map[string]string{}
 	switch c.Verifier {
-	case "gca":
-		// Google Cloud Attestation claims (Confidential Space / CVM token reference).
-		def(&c.Claims.Nonce, "eat_nonce")
-		c.checks["hwmodel"] = "GCP_INTEL_TDX"
-		c.checks["secboot"] = "true"
+	case "maa":
+		// Microsoft Azure Attestation claims for an SEV-SNP confidential VM.
+		def(&c.Claims.Nonce, "x-ms-runtime.client-payload.nonce")
+		def(&c.Claims.LaunchMeasurement, "x-ms-isolation-tee.x-ms-sevsnpvm-launchmeasurement")
+		c.checks["x-ms-isolation-tee.x-ms-attestation-type"] = "sevsnpvm"
+		if c.RequireCompliance != "" {
+			c.checks["x-ms-isolation-tee.x-ms-compliance-status"] = c.RequireCompliance
+		}
 		if !c.AllowDebug {
-			c.checks["dbgstat"] = "disabled-since-boot"
+			c.checks["x-ms-isolation-tee.x-ms-sevsnpvm-is-debuggable"] = "false"
 		}
 	}
 	for k, v := range c.Require {

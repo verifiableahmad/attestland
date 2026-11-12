@@ -43,12 +43,11 @@ spec:
           image: amazon/aws-cli:2.27.50
           envFrom:
             - configMapRef: {name: vllm-model}
-            - secretRef: {name: s3-creds}
+            - configMapRef: {name: s3-settings}
           command: ["sh", "-c"]
+          # Credentials: the node's instance role through IMDS (hop limit 2, infra/gpu-pool).
           args:
-            - AWS_ACCESS_KEY_ID="$S3_ACCESS_KEY" AWS_SECRET_ACCESS_KEY="$S3_SECRET_KEY"
-              AWS_REQUEST_CHECKSUM_CALCULATION=when_required AWS_RESPONSE_CHECKSUM_VALIDATION=when_required
-              aws --endpoint-url "$S3_ENDPOINT" s3 sync --delete "s3://${S3_BUCKET_PREFIX:+$S3_BUCKET_PREFIX-}$MODEL_PREFIX" /models/current
+            - aws s3 sync --delete "s3://${S3_BUCKET_PREFIX:+$S3_BUCKET_PREFIX-}$MODEL_PREFIX" /models/current
           volumeMounts:
             - {name: models, mountPath: /models}
       containers:

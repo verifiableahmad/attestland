@@ -1,38 +1,27 @@
-variable "project_id" {
-  type        = string
-  description = "GCP project that holds the GPU pool."
-}
-
-variable "project_number" {
-  type        = string
-  default     = ""
-  description = "Numeric project id; only needed for the billing budget."
-}
-
-variable "billing_account_id" {
-  type        = string
-  default     = ""
-  description = "Billing account for budget alerts (50/80/100%). Empty skips the budget."
-}
-
-variable "budget_usd" {
-  type    = number
-  default = 300
-}
-
 variable "region" {
   type    = string
-  default = "us-central1"
+  default = "us-east-1"
 }
 
-variable "zone" {
-  type    = string
-  default = "us-central1-a"
+variable "azs" {
+  type        = list(string)
+  default     = ["us-east-1a", "us-east-1b", "us-east-1c", "us-east-1d", "us-east-1f"]
+  description = "Zones that get a subnet; all offer g6.2xlarge (aws ec2 describe-instance-type-offerings)."
 }
 
-variable "subnet_cidr" {
+variable "az" {
+  type        = string
+  default     = "us-east-1a"
+  description = "Zone for every pool VM (NCCL across zones is slower and billed). Change it when a zone has no g6 capacity."
+  validation {
+    condition     = contains(var.azs, var.az)
+    error_message = "az must be one of azs."
+  }
+}
+
+variable "vpc_cidr" {
   type    = string
-  default = "10.20.0.0/24"
+  default = "10.20.0.0/16"
 }
 
 variable "admin_cidrs" {
@@ -45,37 +34,26 @@ variable "gpu_nodes" {
   default = 4
 }
 
-variable "gpu_machine_type" {
+variable "gpu_instance_type" {
   type    = string
-  default = "g2-standard-8" # 1x NVIDIA L4
+  default = "g6.2xlarge" # 1x NVIDIA L4, 8 vCPU, 32 GiB, 450 GB NVMe, up to 10 Gbps
 }
 
-variable "control_machine_type" {
+variable "control_instance_type" {
   type    = string
-  default = "e2-standard-4"
-}
-
-variable "gpu_image" {
-  type        = string
-  default     = "projects/ubuntu-os-cloud/global/images/family/ubuntu-2204-lts"
-  description = "Use the Packer image family (al-gpu-ubuntu-2204) once built."
-}
-
-variable "cpu_image" {
-  type    = string
-  default = "projects/ubuntu-os-cloud/global/images/family/ubuntu-2204-lts"
+  default = "m7i.xlarge" # 4 vCPU, 16 GiB
 }
 
 variable "spot" {
   type        = bool
-  default     = true
-  description = "Spot for development; set false for every timed benchmark."
+  default     = false
+  description = "Spot for development once the account has G spot quota (it is 0 now); false for every timed benchmark."
 }
 
-variable "compact_placement" {
+variable "cluster_placement" {
   type        = bool
   default     = true
-  description = "Place GPU VMs in a compact placement policy (on-demand runs only) so they sit close and expose their topology (ADR 007)."
+  description = "Place GPU VMs in a cluster placement group (on-demand runs only) so they sit close (ADR 007)."
 }
 
 variable "phase" {
@@ -104,10 +82,21 @@ variable "ssh_public_key_path" {
   default = "~/.ssh/id_ed25519.pub"
 }
 
+variable "budget_usd" {
+  type    = number
+  default = 300
+}
+
+variable "budget_contact_emails" {
+  type        = list(string)
+  default     = []
+  description = "Budget alerts (50/80/100%) go here. Empty skips the budget."
+}
+
 variable "bucket_prefix" {
   type        = string
   default     = ""
-  description = "Cloud Storage bucket names are global; buckets are <prefix>-<name>. Empty: the project id."
+  description = "S3 bucket names are global; buckets are <prefix>-<name>. Empty: attestland-<account id>."
 }
 
 variable "bucket_force_destroy" {

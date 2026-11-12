@@ -1,7 +1,7 @@
 # CC overhead benchmark (spec 7.7): the confidential VM against its non-CC twin.
 hosts:
-  cc: al-cc-h100          # a3-highgpu-1g, Intel TDX + H100 80GB, CC on (both Spot, same zone)
-  noncc: al-noncc-h100    # a3-highgpu-1g, same GPU, no TDX and no CC
+  cc: al-cc-h100          # Standard_NCC40ads_H100_v5, AMD SEV-SNP + H100 NVL, CC on
+  noncc: al-noncc-h100    # Standard_NC40ads_H100_v5, same GPU, no SEV-SNP and no CC (same region)
 image_env: VLLM_RECEIPTS_IMAGE   # same pinned image (by digest) on both
 model_dir: /models/current
 repeats: 3

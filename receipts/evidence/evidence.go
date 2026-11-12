@@ -9,15 +9,11 @@ package evidence
 import (
 	"context"
 	"encoding/base64"
-	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
-	"os"
 	"os/exec"
-	"path/filepath"
 	"strings"
-	"time"
 )
 
 // CPU is what a CPU TEE collector returns.
@@ -60,97 +56,43 @@ func execRunner(ctx context.Context, name string, args ...string) ([]byte, error
 	return out, nil
 }
 
-// GoogleCA gets a Google Cloud Attestation token for the Intel TDX
-// Confidential VM (GCP a3-highgpu-1g, the primary platform). go-tpm-tools'
-// gotpm sends the vTPM quote, event log and a TDX quote to GCA, which returns a
-// signed JWT carrying our nonce in eat_nonce. Flags are from go-tpm-tools
-// cmd/token.go (pinned GO_TPM_TOOLS_VERSION):
+// AzureMAA gets a Microsoft Azure Attestation token for the SEV-SNP
+// confidential VM (Azure Standard_NCC40ads_H100_v5, ADR 010). On Azure the SNP
+// report sits behind the paravisor and is exposed through the vTPM; the guest
+// attestation client sends it to MAA with our nonce and gets back a signed JWT.
+// ASSUMPTION (confirm at bring-up, spec 7.3): the client is Azure's
+// cvm-guest-attestation "AttestationClient" sample, run as
 //
-//	gotpm token --tee-technology tdx --custom-nonce <nonce> --audience <aud> --output <file>
+//	AttestationClient -a <MAA URL> -n <nonce> -o token
 //
-// ASSUMPTION (confirm at bring-up): GCA issues TDX tokens on a3-highgpu-1g;
-// Google documents TDX attestation for C3 only. Quote, when set, also embeds a
-// raw TDX quote over the nonce, kept as evidence for a later verifier.
-type GoogleCA struct {
-	Binary   string // path to gotpm
-	Audience string // custom aud claim; must not be sts.googleapis.com
-	Quote    *TDXConfigFS
-	Run      Runner
+// and MAA echoes the nonce in x-ms-runtime.client-payload.nonce.
+type AzureMAA struct {
+	Binary string // path to AttestationClient
+	MAAURL string // e.g. https://sharedeus2.eus2.attest.azure.net
+	Run    Runner
 }
 
-func (g *GoogleCA) AttestCPU(ctx context.Context, nonce string) (CPU, error) {
-	run := g.Run
+func (a *AzureMAA) AttestCPU(ctx context.Context, nonce string) (CPU, error) {
+	run := a.Run
 	if run == nil {
 		run = execRunner
 	}
-	bin := g.Binary
+	bin := a.Binary
 	if bin == "" {
-		bin = "gotpm"
+		bin = "AttestationClient"
 	}
-	f, err := os.CreateTemp("", "gca-token-*")
+	if a.MAAURL == "" {
+		return CPU{}, errors.New("MAA URL not set")
+	}
+	out, err := run(ctx, bin, "-a", a.MAAURL, "-n", nonce, "-o", "token")
 	if err != nil {
 		return CPU{}, err
 	}
-	f.Close()
-	defer os.Remove(f.Name())
-	args := []string{"token", "--tee-technology", "tdx", "--custom-nonce", nonce, "--output", f.Name()}
-	if g.Audience != "" {
-		args = append(args, "--audience", g.Audience)
-	}
-	if _, err := run(ctx, bin, args...); err != nil {
-		return CPU{}, err
-	}
-	raw, err := os.ReadFile(f.Name())
-	if err != nil {
-		return CPU{}, err
-	}
-	tok := strings.TrimSpace(string(raw))
+	tok := strings.TrimSpace(string(out))
 	if strings.Count(tok, ".") != 2 {
-		return CPU{}, fmt.Errorf("gotpm did not return a JWT: %.80q", tok)
+		return CPU{}, fmt.Errorf("AttestationClient did not return a JWT: %.80q", tok)
 	}
-	out := CPU{Type: "tdx", VerifierToken: tok, Tool: "go-tpm-tools gotpm token"}
-	if g.Quote != nil {
-		q, err := g.Quote.AttestCPU(ctx, nonce)
-		if err != nil {
-			return CPU{}, fmt.Errorf("raw TDX quote (disable with --tdx-quote=false): %w", err)
-		}
-		out.Evidence = q.Evidence
-		out.Tool += " + configfs-tsm quote"
-	}
-	return out, nil
-}
-
-// TDXConfigFS reads a TDX quote through the kernel's configfs-tsm interface.
-// The nonce goes into the 64-byte report data (32-byte nonce + 32 zero bytes).
-// GoogleCA attaches it as raw evidence; alverify v1 checks the GCA token, not
-// the quote.
-type TDXConfigFS struct {
-	Root string // default /sys/kernel/config/tsm/report
-}
-
-func (t *TDXConfigFS) AttestCPU(_ context.Context, nonce string) (CPU, error) {
-	root := t.Root
-	if root == "" {
-		root = "/sys/kernel/config/tsm/report"
-	}
-	nb, err := hex.DecodeString(nonce)
-	if err != nil || len(nb) != 32 {
-		return CPU{}, errors.New("nonce must be 32 bytes hex")
-	}
-	dir := filepath.Join(root, fmt.Sprintf("al-%d", time.Now().UnixNano()))
-	if err := os.Mkdir(dir, 0o700); err != nil {
-		return CPU{}, fmt.Errorf("configfs-tsm: %w", err)
-	}
-	defer os.Remove(dir)
-	reportData := append(nb, make([]byte, 32)...)
-	if err := os.WriteFile(filepath.Join(dir, "inblob"), reportData, 0o600); err != nil {
-		return CPU{}, err
-	}
-	quote, err := os.ReadFile(filepath.Join(dir, "outblob"))
-	if err != nil {
-		return CPU{}, err
-	}
-	return CPU{Type: "tdx", Evidence: quote, Tool: "configfs-tsm"}, nil
+	return CPU{Type: "sev-snp", VerifierToken: tok, Tool: "azure-cvm-guest-attestation AttestationClient"}, nil
 }
 
 // NVAT runs NVIDIA's Attestation SDK CLI. ASSUMPTION (confirm against the

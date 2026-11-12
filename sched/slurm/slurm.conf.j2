@@ -46,11 +46,12 @@ SlurmctldPidFile=/run/slurmctld.pid
 SlurmdPidFile=/run/slurmd.pid
 SchedulerParameters=bf_continue,bf_interval=30
 
-# Placement by physical position (ADR 007): topology.conf is generated from GCE
-# block / sub-block data by fleet/topology/topology.py (ansible role topology).
+# Placement by physical position (ADR 007): topology.conf is generated from EC2
+# instance topology by fleet/topology/topology.py (ansible role topology); one
+# flat group on instance types EC2 reports no topology for (g6.2xlarge).
 TopologyPlugin=topology/tree
 SlurmctldParameters=enable_configless
 
-# g2-standard-8: 8 vCPU (4 cores x 2 threads), 32 GB, 1x L4. Check with `slurmd -C`.
+# g6.2xlarge: 8 vCPU (4 cores x 2 threads), 32 GiB, 1x L4. Check with `slurmd -C`.
 NodeName={{ groups['gpu'] | join(',') }} CPUs=8 Boards=1 SocketsPerBoard=1 CoresPerSocket=4 ThreadsPerCore=2 RealMemory=30000 Gres=gpu:1 State=UNKNOWN
 PartitionName={{ slurm_partition }} Nodes=ALL Default=YES MaxTime=INFINITE State=UP OverSubscribe=EXCLUSIVE

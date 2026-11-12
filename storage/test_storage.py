@@ -42,7 +42,7 @@ def test_interval_written_into_experiment(tmp_path):
 
 @pytest.fixture(scope="module")
 def s3_server():
-    """moto's S3 server in a thread: the same S3 API the durable tier uses on Google Cloud Storage."""
+    """moto's S3 server in a thread: the same S3 API the durable tier uses on AWS."""
     try:
         from moto.server import ThreadedMotoServer
     except ImportError:

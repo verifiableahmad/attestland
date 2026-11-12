@@ -1,6 +1,6 @@
-project_id         = "REPLACE-gcp-project-id" # same project as the GPU pool
-project_number     = "REPLACE-123456789012"
-billing_account_id = "REPLACE-000000-000000-000000"
-zone               = "us-central1-a"          # or us-east5-a, europe-west4-c
-admin_cidrs        = ["REPLACE.your.ip.addr/32"]
-create_twin        = false # true only for the overhead benchmark (7.7)
+subscription_id       = "REPLACE-00000000-0000-0000-0000-000000000000"
+location              = "eastus2"
+zone                  = "1"
+admin_cidrs           = ["REPLACE.your.ip.addr/32"]
+create_twin           = false # true only for the overhead benchmark (7.7); the twin size needs SKU access first
+budget_contact_emails = ["REPLACE@example.com"]

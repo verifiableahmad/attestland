@@ -4,7 +4,7 @@
   become: true
   roles: [common, node_exporter, alloy, object_store]
 
-- name: GPU software stack (no-op on the Packer image when versions match)
+- name: GPU software stack
   hosts: gpu
   become: true
   roles: [nvidia_driver, cuda_nccl, container_toolkit, dcgm, scratch, dcgm_exporter, slurm_build, enroot_pyxis, node_agent]
@@ -17,7 +17,7 @@
 - name: Slurm controller, after its topology.conf (slurm.conf names topology/tree)
   hosts: control
   become: true
-  roles: [topology, slurm_controller]
+  roles: [awscli, topology, slurm_controller]
 
 - name: Slurm nodes
   hosts: gpu

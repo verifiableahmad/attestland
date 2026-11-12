@@ -1,6 +1,6 @@
 package receipts_test
 
-// End-to-end: issue a receipt with the test platform (GCA-shaped CPU
+// End-to-end: issue a receipt with the test platform (MAA-shaped CPU
 // token and an NRAS-shaped GPU result, signed by local keys) and a virtual
 // Sigstore image attestation, verify it, then run every negative test from spec
 // 7.6. Each must fail verification.
@@ -45,10 +45,10 @@ type fixture struct {
 }
 
 // shapes maps each CPU token shape to its test policy.
-var shapes = map[string]string{"gca": "policy/test/policy.yaml"}
+var shapes = map[string]string{"maa": "policy/test/policy.yaml"}
 
 func forEachShape(t *testing.T, fn func(t *testing.T, f *fixture)) {
-	for _, shape := range []string{"gca"} {
+	for _, shape := range []string{"maa"} {
 		t.Run(shape, func(t *testing.T) { fn(t, newFixture(t, shape)) })
 	}
 }
@@ -275,11 +275,17 @@ func TestCPUPolicyClaims(t *testing.T) {
 			t.Fatalf("debug VM accepted: %v", failed(rep))
 		}
 	})
-	f := newFixture(t, "gca")
+	f := newFixture(t, "maa")
 	r := marshal(f.issue(t, "r1"))
-	reloadWith(t, f, "submods.gce.project_id: test-project", "submods.gce.project_id: other-project")
+	reloadWith(t, f, `allowed_launch_measurements: ["a1b2c3`, `allowed_launch_measurements: ["ffffff`)
 	if rep := f.check(r, "r1"); rep.OK || !contains(failed(rep), "cpu_attestation") {
-		t.Fatalf("token from another project accepted: %v", failed(rep))
+		t.Fatalf("launch measurement off the allow-list accepted: %v", failed(rep))
+	}
+	f = newFixture(t, "maa")
+	r = marshal(f.issue(t, "r1"))
+	reloadWith(t, f, "require_compliance: azure-compliant-cvm", "require_compliance: other-status")
+	if rep := f.check(r, "r1"); rep.OK || !contains(failed(rep), "cpu_attestation") {
+		t.Fatalf("token with the wrong compliance status accepted: %v", failed(rep))
 	}
 }
 
@@ -301,14 +307,14 @@ func reloadWith(t *testing.T, f *fixture, old, new string) {
 
 func TestPolicyRejectsUnknownCPUVerifier(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "policy.yaml")
-	os.WriteFile(path, []byte("cpu: {type: tdx, verifier: tpm}\n"), 0o644)
+	os.WriteFile(path, []byte("cpu: {type: sev-snp, verifier: tpm}\n"), 0o644)
 	if _, err := verify.LoadPolicy(path); err == nil {
 		t.Fatal("unknown cpu.verifier accepted")
 	}
 }
 
 func TestIssuerRefusesUnverifiedImage(t *testing.T) {
-	f := newFixture(t, "gca")
+	f := newFixture(t, "maa")
 	is := &issuer.Issuer{CPU: f.tp, GPU: f.tp, VerifyImage: func([]byte, string) error { return fmt.Errorf("identity mismatch") }}
 	_, err := is.Issue(context.Background(), issuer.Request{JobID: "x", Kind: "inference", Scheduler: "k8s",
 		Cloud: "test", Image: imageRepo + "@sha256:" + f.digest, Bundle: []byte("{}"),

@@ -40,7 +40,7 @@
       "required": ["cloud", "vm_size", "cpu_tee", "gpu_tee"],
       "additionalProperties": false,
       "properties": {
-        "cloud": {"enum": ["gcp", "test"]},
+        "cloud": {"enum": ["azure", "test"]},
         "vm_size": {"type": "string"},
         "cpu_tee": {
           "type": "object",

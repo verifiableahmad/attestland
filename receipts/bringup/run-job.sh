@@ -8,8 +8,9 @@
 set -euo pipefail
 job=${1:?job id} reqs=${2:?requests.jsonl} model=${3:?model dir} out=${4:?out dir}
 : "${VLLM_RECEIPTS_IMAGE:?repo@sha256:...}" "${CERT_IDENTITY:?workflow identity}"
-# AL_PLATFORM: gcp (default) | test
-platform_args=(--platform "${AL_PLATFORM:-gcp}")
+# AL_PLATFORM: azure (default; MAA_URL from /etc/fleet/receipts.env) | test
+[[ ! -r /etc/fleet/receipts.env ]] || { set -a; source /etc/fleet/receipts.env; set +a; }
+platform_args=(--platform "${AL_PLATFORM:-azure}")
 HERE=$(cd "$(dirname "$0")" && pwd)
 mkdir -p "$out"
 
