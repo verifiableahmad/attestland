@@ -54,6 +54,9 @@
   register: slurm_conf
 
 - name: systemd units from the Slurm build
-  ansible.builtin.shell: cp /usr/src/slurm-{{ slurm_version }}/etc/{slurmd,slurmctld,slurmdbd,slurmrestd}.service /etc/systemd/system/
-  args:
-    creates: /etc/systemd/system/slurmd.service
+  ansible.builtin.copy:
+    src: "/usr/src/slurm-{{ slurm_version }}/etc/{{ item }}.service"
+    dest: /etc/systemd/system/
+    remote_src: true
+    mode: "0644"
+  loop: [slurmd, slurmctld, slurmdbd, slurmrestd]
