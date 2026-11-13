@@ -10,13 +10,21 @@
       Pin: version 1:{{ dcgm_version }}-*
       Pin-Priority: 1001
 
+# dcgmi diag loads the plugins built for the CUDA version the driver reports
+# (580 -> 13), which is not the toolkit's cuda_version.
+- name: CUDA major version the driver reports
+  ansible.builtin.shell: "nvidia-smi | grep -o 'CUDA Version: [0-9]*' | grep -o '[0-9]*$'"
+  register: dcgm_cuda_major
+  changed_when: false
+
 - name: DCGM (host engine, dcgmi diag)
   ansible.builtin.apt:
-    name: "datacenter-gpu-manager-4-cuda{{ cuda_version.split('.')[0] }}=1:{{ dcgm_version }}-*"
+    name: "datacenter-gpu-manager-4-cuda{{ dcgm_cuda_major.stdout }}=1:{{ dcgm_version }}-*"
     update_cache: true
+  register: dcgm_pkg
 
 - name: DCGM host engine
   ansible.builtin.systemd:
     name: nvidia-dcgm
     enabled: true
-    state: started
+    state: "{{ 'restarted' if dcgm_pkg.changed else 'started' }}"

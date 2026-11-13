@@ -1,8 +1,24 @@
+# slurmd loads topology/tree from its local slurm.conf, so it needs the file the
+# topology role generated on the control VM.
+- name: topology.conf as generated on the controller
+  ansible.builtin.slurp:
+    src: /etc/slurm/topology.conf
+  delegate_to: "{{ groups['control'][0] }}"
+  run_once: true
+  register: al_topology_src
+
+- name: topology.conf matches the controller
+  ansible.builtin.copy:
+    content: "{{ al_topology_src.content | b64decode }}"
+    dest: /etc/slurm/topology.conf
+    mode: "0644"
+  register: al_topology_node
+
 - name: slurmd running
   ansible.builtin.systemd:
     name: slurmd
     enabled: true
-    state: "{{ 'restarted' if slurm_conf.changed | default(false) else 'started' }}"
+    state: "{{ 'restarted' if (slurm_conf.changed | default(false)) or al_topology_node.changed else 'started' }}"
     daemon_reload: true
 
 - name: Enroot config

@@ -9,6 +9,18 @@
     name: unattended-upgrades
     state: absent
 
+- name: Keep cloud-init from resetting the hostname on reboot
+  ansible.builtin.copy:
+    dest: /etc/cloud/cloud.cfg.d/99-al-hostname.cfg
+    content: |
+      preserve_hostname: true
+    mode: "0644"
+
+# slurm.conf and kubelet both identify nodes by inventory name; EC2 boots as ip-10-x-x-x.
+- name: Hostname matches the inventory name
+  ansible.builtin.hostname:
+    name: "{{ inventory_hostname }}"
+
 - name: Hosts file entries for every node
   ansible.builtin.lineinfile:
     path: /etc/hosts
