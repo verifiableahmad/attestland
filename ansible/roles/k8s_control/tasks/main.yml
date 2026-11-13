@@ -1,3 +1,13 @@
+# registry.k8s.io sometimes answers 429 to EC2 addresses; retry here so kubeadm init finds the images cached.
+- name: Control-plane images
+  ansible.builtin.command: kubeadm config images pull --kubernetes-version v{{ kubernetes_version }}
+  args:
+    creates: /etc/kubernetes/admin.conf
+  register: k8s_images
+  retries: 5
+  delay: 20
+  until: k8s_images.rc == 0
+
 - name: kubeadm init
   ansible.builtin.command: >-
     kubeadm init
@@ -8,6 +18,12 @@
     --apiserver-cert-extra-sans {{ ansible_host }}
   args:
     creates: /etc/kubernetes/admin.conf
+
+- name: kubeconfig directory for root
+  ansible.builtin.file:
+    path: /root/.kube
+    state: directory
+    mode: "0700"
 
 - name: kubeconfig for root
   ansible.builtin.copy:

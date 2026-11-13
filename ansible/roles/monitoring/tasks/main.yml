@@ -70,12 +70,49 @@
       image: "{{ grafana_image }}"
       volumes: ["/etc/grafana/provisioning:/etc/grafana/provisioning:ro", "/var/lib/grafana:/var/lib/grafana"]
       env: {GF_SECURITY_ADMIN_PASSWORD: "{{ grafana_admin_password }}", GF_AUTH_ANONYMOUS_ENABLED: "false"}
-    - name: slurm-exporter
-      image: "{{ slurm_exporter_image }}"
-      volumes: ["/etc/slurm:/etc/slurm:ro", "/run/munge:/run/munge", "/usr/bin/sinfo:/usr/bin/sinfo:ro", "/usr/bin/squeue:/usr/bin/squeue:ro"]
-      command: "-web.listen-address=:9341"
   loop_control:
     label: "{{ item.name }}"
+
+# The Slurm exporter runs on the host: upstream publishes release binaries only,
+# and it shells out to the host's sinfo and squeue.
+- name: slurm-exporter directory
+  ansible.builtin.file:
+    path: "/opt/al/slurm-exporter-{{ slurm_exporter_version }}"
+    state: directory
+    mode: "0755"
+
+- name: slurm-exporter binary
+  ansible.builtin.unarchive:
+    src: "https://github.com/rivosinc/prometheus-slurm-exporter/releases/download/v{{ slurm_exporter_version }}/prometheus-slurm-exporter_{{ slurm_exporter_version }}_linux_amd64.tar.gz"
+    dest: "/opt/al/slurm-exporter-{{ slurm_exporter_version }}"
+    remote_src: true
+    creates: "/opt/al/slurm-exporter-{{ slurm_exporter_version }}/prometheus-slurm-exporter"
+
+- name: slurm-exporter unit
+  ansible.builtin.copy:
+    dest: /etc/systemd/system/slurm-exporter.service
+    content: |
+      [Unit]
+      Description=Prometheus Slurm exporter
+      After=network-online.target slurmctld.service
+
+      [Service]
+      DynamicUser=yes
+      ExecStart=/opt/al/slurm-exporter-{{ slurm_exporter_version }}/prometheus-slurm-exporter -web.listen-address=:9341
+      Restart=always
+      RestartSec=5
+
+      [Install]
+      WantedBy=multi-user.target
+    mode: "0644"
+  register: slurm_exporter_unit
+
+- name: slurm-exporter running
+  ansible.builtin.systemd:
+    name: slurm-exporter
+    enabled: true
+    state: "{{ 'restarted' if slurm_exporter_unit.changed else 'started' }}"
+    daemon_reload: true
 
 - name: Goodput textfile directory on control
   ansible.builtin.file:

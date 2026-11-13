@@ -10,7 +10,8 @@ RestartSec=5
 ExecStartPre=-/usr/bin/podman rm -f {{ svc_name }}
 ExecStart=/usr/bin/podman run --rm --name {{ svc_name }} \
   --network {{ svc_network | default('host') }} \
-{% if svc_gpus | default(false) %}  --device nvidia.com/gpu=all --cap-add SYS_ADMIN \
+{# Ubuntu 22.04 ships podman 3.4, which predates CDI (--device nvidia.com/gpu=all); the NVIDIA runtime injects the GPU instead. #}
+{% if svc_gpus | default(false) %}  --runtime /usr/bin/nvidia-container-runtime -e NVIDIA_VISIBLE_DEVICES=all --cap-add SYS_ADMIN \
 {% endif %}
 {% for v in svc_volumes | default([]) %}  -v {{ v }} \
 {% endfor %}

@@ -10,7 +10,9 @@
   block:
     - name: Build and import into containerd
       ansible.builtin.shell: |
+        set -e
         podman build -t localhost/healthd:local /opt/al/src/healthd
+        rm -f /tmp/healthd.tar
         podman save localhost/healthd:local -o /tmp/healthd.tar
         ctr -n k8s.io images import /tmp/healthd.tar
       changed_when: true

@@ -29,6 +29,7 @@
     content: |
       [Service]
       User=nobody
+      Group=nogroup
       Environment=SLURM_JWT=daemon
       ExecStart=
       ExecStart=/usr/sbin/slurmrestd -a rest_auth/jwt 0.0.0.0:6820

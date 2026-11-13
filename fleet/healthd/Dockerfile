@@ -1,5 +1,5 @@
 # healthd: single static binary on distroless.
-FROM golang:1.24 AS build
+FROM docker.io/library/golang:1.24 AS build
 WORKDIR /src
 COPY go.mod go.sum ./
 RUN go mod download
