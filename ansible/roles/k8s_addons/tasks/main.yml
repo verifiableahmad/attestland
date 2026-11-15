@@ -27,8 +27,13 @@
     kubectl apply -f /opt/al/k8s/kueue/namespaces.yaml
     # Topology before the flavor that names it; apiVersion = the storage version of the CRD (ADR 007)
     topo_api=$(kubectl get crd topologies.kueue.x-k8s.io -o jsonpath='{.spec.versions[?(@.storage==true)].name}')
-    sed "s|^apiVersion: kueue.x-k8s.io/.*|apiVersion: kueue.x-k8s.io/${topo_api}|" /opt/al/k8s/kueue/topology.yaml | kubectl apply -f -
-    kubectl apply -f /opt/al/k8s/kueue/flavors-and-queues.yaml
+    # The webhook Service refuses connections for a few seconds after the rollout: retry for a minute.
+    for try in $(seq 12); do
+      if sed "s|^apiVersion: kueue.x-k8s.io/.*|apiVersion: kueue.x-k8s.io/${topo_api}|" /opt/al/k8s/kueue/topology.yaml | kubectl apply -f - \
+          && kubectl apply -f /opt/al/k8s/kueue/flavors-and-queues.yaml; then break; fi
+      [ "$try" -lt 12 ]
+      sleep 5
+    done
   args:
     executable: /bin/bash
   changed_when: true

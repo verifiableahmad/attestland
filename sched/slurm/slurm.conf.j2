@@ -52,6 +52,9 @@ SchedulerParameters=bf_continue,bf_interval=30
 TopologyPlugin=topology/tree
 SlurmctldParameters=enable_configless
 
-# g6.2xlarge: 8 vCPU (4 cores x 2 threads), 32 GiB, 1x L4. Check with `slurmd -C`.
-NodeName={{ groups['gpu'] | join(',') }} CPUs=8 Boards=1 SocketsPerBoard=1 CoresPerSocket=4 ThreadsPerCore=2 RealMemory=30000 Gres=gpu:1 State=UNKNOWN
+# Node shape by instance type, 1x L4 each. Check with `slurmd -C`.
+#   g6.2xlarge: 8 vCPU (4 cores x 2 threads), 32 GiB
+#   g6.xlarge:  4 vCPU (2 cores x 2 threads), 16 GiB
+{% set shape = {'g6.2xlarge': {'cores': 4, 'mem': 30000}, 'g6.xlarge': {'cores': 2, 'mem': 15000}}[al_gpu_instance_type | default('g6.2xlarge')] %}
+NodeName={{ groups['gpu'] | join(',') }} CPUs={{ shape.cores * 2 }} Boards=1 SocketsPerBoard=1 CoresPerSocket={{ shape.cores }} ThreadsPerCore=2 RealMemory={{ shape.mem }} Gres=gpu:1 State=UNKNOWN
 PartitionName={{ slurm_partition }} Nodes=ALL Default=YES MaxTime=INFINITE State=UP OverSubscribe=EXCLUSIVE
