@@ -4,6 +4,7 @@
     src: config.alloy.j2
     dest: /etc/fleet/config.alloy
     mode: "0644"
+  register: alloy_config
 
 - name: Alloy service
   ansible.builtin.include_role:
@@ -18,3 +19,9 @@
       - /etc/machine-id:/etc/machine-id:ro
       - "{{ scratch_mount }}/logs:/scratch/logs:ro"
     svc_command: "run /etc/alloy/config.alloy --storage.path=/var/lib/alloy"
+
+- name: Restart Alloy after a config change
+  ansible.builtin.systemd:
+    name: alloy
+    state: restarted
+  when: alloy_config.changed

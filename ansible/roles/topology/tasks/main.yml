@@ -8,6 +8,8 @@
       || { echo "topology lookup failed; placing every node in one group" >&2; echo '{"Instances": []}'; }
   register: al_positions
   changed_when: false
+  # Nebius reports a position only for GPU-cluster (InfiniBand) VMs, which this pool has none of.
+  when: al_cloud == 'aws'
 
 - name: Topology tool and facts
   ansible.builtin.copy:
@@ -19,7 +21,7 @@
   ansible.builtin.copy:
     dest: /opt/al/topology-facts.json
     content: |
-      {% set topo = (al_positions.stdout | from_json).get('Instances', []) %}
+      {% set topo = (al_positions.stdout | default('{}') | from_json).get('Instances', []) %}
       {% set facts = {} %}
       {% for n in groups['gpu'] %}
       {% set _ = facts.update({n: topo | selectattr('InstanceId', 'equalto', hostvars[n].instance_id) | list | first | default('')}) %}

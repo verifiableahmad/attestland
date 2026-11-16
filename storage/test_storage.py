@@ -110,3 +110,25 @@ def test_disk_full_falls_back_to_direct_durable(tmp_path, durable, monkeypatch):
     st = m.save(9, _state(9))
     assert st.tier == "durable" and "ENOSPC" in st.error
     assert m.choose_restore() == (9, "durable")
+
+
+def test_corpus_upload_then_fetch_on_another_node(tmp_path, durable, s3_server):
+    import boto3
+    import prepare
+    from data import verify_manifest, write_shards
+    s3 = boto3.client("s3", endpoint_url=s3_server, aws_access_key_id="test",
+                      aws_secret_access_key="testtesttest", region_name="us-east-1")
+    if "datasets" not in [b["Name"] for b in s3.list_buckets()["Buckets"]]:
+        s3.create_bucket(Bucket="datasets")
+    built, node = tmp_path / "built", tmp_path / "node"
+    write_shards(prepare.tokens_synthetic(40_000), built, 10_000, "synthetic", "synthetic-2048")
+    assert not prepare.uploaded("s3://datasets/tiny")
+    with pytest.raises(SystemExit):
+        prepare.fetch(node, "s3://datasets/tiny")
+    prepare.upload(built, "s3://datasets/tiny")
+    assert prepare.uploaded("s3://datasets/tiny")
+    assert prepare.fetch(node, "s3://datasets/tiny") == 5      # 4 shards + manifest
+    assert verify_manifest(node) == verify_manifest(built)
+    assert prepare.fetch(node, "s3://datasets/tiny") == 0      # nothing missing
+    (node / "shard_00002.bin").unlink()
+    assert prepare.fetch(node, "s3://datasets/tiny") == 1

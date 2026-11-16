@@ -13,7 +13,7 @@ why each was chosen, written for software engineers new to GPU infrastructure.
 ## Layout
 
 ```
-infra/          OpenTofu: gpu-pool (AWS), cc-pool (Azure), lab-host (AWS bare metal);
+infra/          OpenTofu: gpu-pool (AWS), gpu-pool-nebius (Nebius, ADR 013), cc-pool (Azure), lab-host (AWS bare metal);
                 reaper (8-hour sweep script + its AWS role, Azure app and repo variables)
 ansible/        roles for drivers, Slurm, k8s, object-store credentials, monitoring, healthd, CC bring-up
 versions.env    every pinned version

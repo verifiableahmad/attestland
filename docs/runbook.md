@@ -77,6 +77,48 @@ the Phase 1 quota requests first; they are the longest lead-time items.
    apps in the tenant. Check: `gh workflow run reaper -f dry_run=1`, then the
    run log shows both passes listing instead of skipping.
 
+## Nebius GPU pool (alternative to AWS, ADR 013)
+
+The GPU pool can run on Nebius instead of AWS. Every Phase 2-4 step is the same
+with `CLOUD=nebius` added to the `make up`, `configure`, `down`, `control-ssh`
+and `burnin` commands.
+
+1. CLI and login (browser), then note the project and tenant IDs:
+
+   ```sh
+   curl -sSL https://storage.eu-north1.nebius.cloud/cli/install.sh | bash
+   nebius profile create
+   nebius iam project list
+   nebius iam tenant list
+   ```
+2. Quotas in eu-north1 (console, Quotas). The default tier has 2 regular VMs,
+   4 disks and 0 non-GPU vCPUs, so request: regular VMs = gpu_nodes + 1,
+   disks = gpu_nodes + 1, non-GPU vCPUs ≥ 4 (the control VM); for the default
+   2 GPU nodes that is 3 VMs, 3 disks and 4 vCPUs. 8 L40S GPUs are there by
+   default. Without the vCPU increase the control VM cannot start.
+3. Check that the image family exists for both platforms:
+
+   ```sh
+   nebius compute image list-public --region eu-north1 | grep -B2 -A8 ubuntu24.04-driverless
+   ```
+4. Configure and create. Fill `project_id` and `tenant_id` from step 1 and
+   `admin_cidrs` with your current public IP. `.env` holds the cluster secrets
+   (Phase 2, step 2 creates it).
+
+   ```sh
+   cp infra/gpu-pool-nebius/terraform.tfvars.example infra/gpu-pool-nebius/terraform.tfvars
+   curl -s https://checkip.amazonaws.com      # -> admin_cidrs = ["<ip>/32"]
+   . ./.env
+   make up POOL=gpu CLOUD=nebius
+   make control-ssh CLOUD=nebius
+   ```
+5. No reaper covers Nebius yet: destroy the pool at the end of every session.
+
+   ```sh
+   make down POOL=gpu CLOUD=nebius
+   nebius compute instance list --format jsonpath='{range .items[*]}{.metadata.name}{"\t"}{.status.state}{"\n"}{end}'
+   ```
+
 ## Phase 2 - GPU cluster (AWS, ~60 GPU-hours budgeted)
 
 1. `cp infra/gpu-pool/terraform.tfvars.example infra/gpu-pool/terraform.tfvars`, fill it.
@@ -99,11 +141,28 @@ the Phase 1 quota requests first; they are the longest lead-time items.
    ```
 3. `make up POOL=gpu` (on-demand; `spot = true` only once the account has G Spot quota).
    If EC2 returns `InsufficientInstanceCapacity`, set `az` to another zone and re-apply.
-   Check `sinfo`, `kubectl get nodes`, Grafana on :3000.
-4. Data: `python workloads/train/prepare.py --source hf:HuggingFaceFW/fineweb-edu:sample-10BT --tokens 2_000_000_000 --out /scratch/data/fineweb-edu-2b --upload s3://datasets/fineweb-edu-2b`, then sync to each node's /scratch.
-5. With `spot = false` (the default), the timed runs:
+   The control node is the login node: `make up` copies this working tree to
+   `/opt/al/repo` there and shares it and `/scratch/logs` with the GPU nodes
+   over NFS, so steps 4 and 5 run on it and no step needs a shell on a GPU node.
+   After a local edit, `make configure POOL=gpu` copies the tree again.
+
+   ```sh
+   make control-ssh                 # shell in /opt/al/repo on the control node
+   sinfo; kubectl get nodes         # Grafana: http://<control ip>:3000
+   tail -f /scratch/logs/<job>-<id>.log
+   ```
+4. Data, on the control node: `make data` builds the corpus in the training
+   container on one Slurm node, uploads it to `s3://<prefix>-datasets/fineweb-edu-2b`
+   and copies it to the `/scratch` of every idle Slurm node. Run it again after
+   `pool-move` or a node replacement; it then only copies what is missing.
+
+   ```sh
+   make data                        # NODES=n to choose the node count
+   ```
+5. With `spot = false` (the default), the timed runs, on the control node:
    - `make nccl` → `bench/results/net/nccl-*.json`
    - `make train-sweep` → `bench/results/train/scale-*.json`, `scaling-summary-*.json`
+     (`GPUS="1 2"` on a pool with fewer than four Slurm nodes)
    - export a checkpoint with `workloads/train/export_hf.py`, upload to `s3://models/al-gpt-124m-hf`,
      `make pool-move NODE=al-gpu-04 TO=k8s`, `make serve-bench` → `bench/results/serve/*.json`
    - Kueue quota check: `kubectl create -f sched/k8s/kueue/quota-test.yaml` three times; extras stay `Pending`.

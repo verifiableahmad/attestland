@@ -1,0 +1,14 @@
+# GPU nodes: the control node's working tree and job logs at the same paths.
+# After the scratch role, because the log directory sits on the scratch mount.
+- name: NFS client
+  ansible.builtin.apt:
+    name: nfs-common
+
+- name: Mount the shared directories
+  ansible.posix.mount:
+    path: "{{ item }}"
+    src: "{{ control_private_ip }}:{{ item }}"
+    fstype: nfs
+    opts: rw,hard,_netdev,nofail
+    state: mounted
+  loop: "{{ shared_dirs }}"

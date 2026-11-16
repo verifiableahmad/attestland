@@ -7,7 +7,7 @@
 
 - name: CUDA apt repository keyring
   ansible.builtin.apt:
-    deb: https://developer.download.nvidia.com/compute/cuda/repos/ubuntu2204/x86_64/cuda-keyring_1.1-1_all.deb
+    deb: "https://developer.download.nvidia.com/compute/cuda/repos/ubuntu{{ ansible_distribution_version | replace('.', '') }}/x86_64/cuda-keyring_1.1-1_all.deb"
   when: drv.rc != 0 or (drv.stdout_lines | first | default('')) != nvidia_driver_version
 
 # Pinning only the metapackage is not enough: its exact-version dependencies

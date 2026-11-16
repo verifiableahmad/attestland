@@ -63,9 +63,9 @@ class SaveStats:
 
 
 def _s3_settings() -> dict:
-    """Endpoint, region and keys from AL_S3_* when set. On the pool only the region is set:
-    S3 itself, with credentials from the node's instance role (ADR 010). Tests point
-    AL_S3_ENDPOINT and the keys at a local S3 server."""
+    """Endpoint, region and keys from AL_S3_* when set. On the AWS pool only the region is
+    set: S3 itself, with credentials from the node's instance role (ADR 010). The Nebius
+    pool sets all of them (ADR 013), and tests point them at a local S3 server."""
     out = {"endpoint_url": os.environ.get("AL_S3_ENDPOINT") or None,
            "region_name": os.environ.get("AL_S3_REGION") or None}
     if os.environ.get("AL_S3_ACCESS_KEY"):

@@ -1,0 +1,5 @@
+# Extras for prepare.py on top of the NGC PyTorch image: the tokeniser, the
+# corpus reader and the durable bucket client.
+boto3==1.40.30
+tiktoken==0.14.0
+datasets==5.2.0

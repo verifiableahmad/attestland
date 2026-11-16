@@ -32,6 +32,23 @@
     remote_src: true
     mode: "0600"
 
+- name: kubeconfig directory for the login user
+  ansible.builtin.file:
+    path: "/home/{{ ansible_user }}/.kube"
+    state: directory
+    owner: "{{ ansible_user }}"
+    group: "{{ ansible_user }}"
+    mode: "0700"
+
+- name: kubeconfig for the login user (kubectl on the control node without sudo)
+  ansible.builtin.copy:
+    src: /etc/kubernetes/admin.conf
+    dest: "/home/{{ ansible_user }}/.kube/config"
+    remote_src: true
+    owner: "{{ ansible_user }}"
+    group: "{{ ansible_user }}"
+    mode: "0600"
+
 - name: Calico CNI
   ansible.builtin.command: kubectl apply -f https://raw.githubusercontent.com/projectcalico/calico/{{ calico_version }}/manifests/calico.yaml
   changed_when: true
@@ -48,5 +65,5 @@
 - name: Fetch kubeconfig for the operator laptop
   ansible.builtin.fetch:
     src: /etc/kubernetes/admin.conf
-    dest: "{{ playbook_dir }}/inventory/kubeconfig-{{ al_cloud }}"
+    dest: "{{ playbook_dir }}/../secrets/kubeconfig-{{ al_cloud }}"
     flat: true

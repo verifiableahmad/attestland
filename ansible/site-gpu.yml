@@ -1,4 +1,9 @@
 # make up POOL=gpu: configure control and GPU nodes.
+- name: Working tree and job logs on the control node, exported over NFS
+  hosts: control
+  become: true
+  roles: [shared]
+
 - name: Base
   hosts: all
   become: true
@@ -8,6 +13,9 @@
   hosts: gpu
   become: true
   roles: [nvidia_driver, cuda_nccl, container_toolkit, dcgm, scratch, dcgm_exporter, slurm_build, enroot_pyxis, node_agent]
+  tasks:
+    - name: Working tree and job logs from the control node
+      ansible.builtin.import_role: {name: shared, tasks_from: mount}
 
 - name: Slurm
   hosts: control:gpu

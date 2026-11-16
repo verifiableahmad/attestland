@@ -1,0 +1,84 @@
+# Control node as the login node: this working tree (committed or not) at
+# /opt/al/repo and the job logs at /scratch/logs live here and are exported over
+# NFS, so sbatch, the result parsers and `tail -f` all run on the control node.
+# The GPU nodes mount both at the same paths (tasks/mount.yml).
+- name: rsync, venv support and the NFS server
+  ansible.builtin.apt:
+    name: [rsync, python3-venv, nfs-kernel-server]
+    update_cache: true
+    cache_valid_time: 3600
+
+- name: Repo directory owned by the login user (jobs write bench/results as that user)
+  ansible.builtin.file:
+    path: /opt/al/repo
+    state: directory
+    owner: "{{ ansible_user }}"
+    group: "{{ ansible_user }}"
+    mode: "0755"
+
+- name: Job log directory (same mode as on the GPU nodes' scratch)
+  ansible.builtin.file:
+    path: "{{ scratch_mount }}/logs"
+    state: directory
+    mode: "1777"
+
+# Excludes: what .gitignore keeps out of the repository (secrets, state, build
+# output) and the fetched kubeconfig. Nothing is deleted on the control node, so
+# result files written there survive a re-run.
+- name: Copy the working tree
+  become: false
+  ansible.posix.synchronize:
+    src: "{{ playbook_dir }}/../"
+    dest: /opt/al/repo/
+    owner: false
+    group: false
+    rsync_opts:
+      - --exclude=.venv
+      - --exclude=.terraform
+      - --exclude=*.tfstate*
+      - --exclude=*.tfvars
+      - --exclude=clab-*
+      - --exclude=.env
+      - --exclude=secrets
+      - --exclude=*.pem
+      - --exclude=*.key
+      - --exclude=/bin
+      - --exclude=/out
+      - --exclude=__pycache__
+      - --exclude=.pytest_cache
+      - --exclude=.DS_Store
+      - --exclude=ansible/inventory/kubeconfig-*
+
+# What the make targets run outside a container: the result library
+# (jsonschema) and the serving sweep (PyYAML).
+- name: venv for the make targets
+  become: false
+  ansible.builtin.pip:
+    name: "{{ lookup('file', playbook_dir + '/../requirements-dev.txt').splitlines() | select('match', '^(PyYAML|jsonschema)==') | list }}"
+    virtualenv: /opt/al/repo/.venv
+    virtualenv_command: python3 -m venv
+
+- name: Exports directory
+  ansible.builtin.file:
+    path: /etc/exports.d
+    state: directory
+    mode: "0755"
+
+- name: Export the shared directories to the GPU nodes
+  ansible.builtin.copy:
+    dest: /etc/exports.d/al.exports
+    mode: "0644"
+    content: |
+      {% for dir in shared_dirs %}
+      {{ dir }} {{ groups['gpu'] | map('extract', hostvars, 'private_ip') | map('regex_replace', '$', '(rw,sync,no_subtree_check)') | join(' ') }}
+      {% endfor %}
+
+- name: NFS server
+  ansible.builtin.systemd:
+    name: nfs-server
+    enabled: true
+    state: started
+
+- name: Apply the exports
+  ansible.builtin.command: exportfs -ra
+  changed_when: false

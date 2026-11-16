@@ -12,13 +12,23 @@ k8s_service_cidr: 10.96.0.0/12
 
 # Durable tier: S3 buckets (ADR 010). Nodes reach them with their instance role, so
 # there are no keys; the region and bucket prefix come from the inventory (tofu output).
+# Not named bucket_prefix: a group variable of that name would shadow the inventory's.
 s3_region: "{{ al_region | default('us-east-1') }}"
-bucket_prefix: "{{ lookup('env', 'AL_BUCKET_PREFIX') | default(hostvars[inventory_hostname].bucket_prefix | default(''), true) }}"
+s3_bucket_prefix: "{{ lookup('env', 'AL_BUCKET_PREFIX') | default(bucket_prefix | default(''), true) }}"
+# Nebius (ADR 013): no instance role, so an S3 endpoint and a service-account key.
+# The key comes from the tofu outputs, never from the inventory (it is tracked).
+s3_endpoint_url: "{{ s3_endpoint | default('') }}"
+# -json, not -raw: with no state, -raw prints a warning and exits 0.
+s3_tofu_outputs: "{{ lookup('pipe', 'tofu -chdir=' ~ playbook_dir ~ '/../infra/gpu-pool-nebius output -json') | from_json if s3_endpoint_url else {} }}"
+s3_access_key: "{{ s3_tofu_outputs['s3_access_key_id']['value'] if s3_endpoint_url else '' }}"
+s3_secret_key: "{{ s3_tofu_outputs['s3_secret_access_key']['value'] if s3_endpoint_url else '' }}"
 
 grafana_admin_password: "{{ lookup('env', 'AL_GRAFANA_PASSWORD') | default('change-me-grafana', true) }}"
 alert_webhook_url: "{{ lookup('env', 'AL_ALERT_WEBHOOK_URL') | default('', true) }}"
 
 scratch_mount: /scratch
+# On the control node, NFS-mounted at the same paths on the GPU nodes (role shared).
+shared_dirs: [/opt/al/repo, "{{ scratch_mount }}/logs"]
 textfile_dir: /var/lib/node_exporter/textfile
 
 # Which scheduler owns each GPU node at first boot. pool-move changes it later.

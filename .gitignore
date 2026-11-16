@@ -18,3 +18,13 @@ secrets/
 workloads/train/data/
 workloads/train/out/
 bench/plots/
+
+# Generated per cloud by `make infra-up POOL=gpu CLOUD=nebius` (holds live addresses).
+ansible/inventory/gpu-nebius.ini
+ansible/inventory/kubeconfig-nebius
+
+# Generated inventory and kubeconfigs (live IPs, account ID, cluster-admin key). Never commit.
+ansible/inventory/*.ini
+ansible/inventory/kubeconfig-*
+!ansible/inventory/*.example
+.DS_Store

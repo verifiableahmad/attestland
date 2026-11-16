@@ -38,12 +38,23 @@
     executable: /bin/bash
   changed_when: true
 
-- name: Durable bucket settings for serving (credentials come from the node role via IMDS)
+- name: Durable bucket settings for serving (AWS credentials come from the node role via IMDS)
   ansible.builtin.shell: |
     kubectl -n serving create configmap s3-settings \
       --from-literal=AWS_REGION={{ s3_region }} \
-      --from-literal=S3_BUCKET_PREFIX={{ bucket_prefix }} \
+      --from-literal=S3_BUCKET_PREFIX={{ s3_bucket_prefix }} \
+      {% if s3_endpoint_url %}--from-literal=AWS_ENDPOINT_URL={{ s3_endpoint_url }} {% endif %}\
       --dry-run=client -o yaml | kubectl apply -f -
+  changed_when: true
+
+- name: S3 key for serving (Nebius, ADR 013; no instance role there)
+  ansible.builtin.shell: |
+    kubectl -n serving create secret generic s3-credentials \
+      --from-literal=AWS_ACCESS_KEY_ID={{ s3_access_key | quote }} \
+      --from-literal=AWS_SECRET_ACCESS_KEY={{ s3_secret_key | quote }} \
+      --dry-run=client -o yaml | kubectl apply -f -
+  when: s3_endpoint_url | length > 0
+  no_log: true
   changed_when: true
 
 - name: vLLM

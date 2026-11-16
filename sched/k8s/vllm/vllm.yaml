@@ -44,8 +44,9 @@ spec:
           envFrom:
             - configMapRef: {name: vllm-model}
             - configMapRef: {name: s3-settings}
+            - secretRef: {name: s3-credentials, optional: true}   # Nebius only (ADR 013)
           command: ["sh", "-c"]
-          # Credentials: the node's instance role through IMDS (hop limit 2, infra/gpu-pool).
+          # Credentials on AWS: the node's instance role through IMDS (hop limit 2, infra/gpu-pool).
           args:
             - aws s3 sync --delete "s3://${S3_BUCKET_PREFIX:+$S3_BUCKET_PREFIX-}$MODEL_PREFIX" /models/current
           volumeMounts:
@@ -71,13 +72,15 @@ spec:
             httpGet: {path: /health, port: http}
             initialDelaySeconds: 300
             periodSeconds: 15
+          # Sized to fit a g6.xlarge (4 vCPU, 14.9Gi allocatable) beside the
+          # node's daemonsets; Kueue admits the pod only if one node holds it.
           resources:
             limits:
               nvidia.com/gpu: 1
-              memory: 24Gi
+              memory: 14Gi
             requests:
-              cpu: "4"
-              memory: 16Gi
+              cpu: "3"
+              memory: 12Gi
           volumeMounts:
             - {name: models, mountPath: /models}
             - {name: shm, mountPath: /dev/shm}

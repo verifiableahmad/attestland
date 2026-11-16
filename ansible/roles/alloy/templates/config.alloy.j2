@@ -24,7 +24,9 @@ loki.source.journal "journal" {
 local.file_match "jobs" {
   path_targets = [
     { __path__ = "/var/log/slurm/*.log", job = "slurm", host = "{{ inventory_hostname }}" },
+{% if 'control' in group_names %}
     { __path__ = "/scratch/logs/*.log", job = "workload", host = "{{ inventory_hostname }}" },
+{% endif %}
   ]
 }
 
