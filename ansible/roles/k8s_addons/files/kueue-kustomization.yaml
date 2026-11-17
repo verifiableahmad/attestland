@@ -1,0 +1,20 @@
+# Kueue as installed (role k8s_addons): the release manifest, downloaded beside
+# this file and checked against KUEUE_MANIFEST_SHA256, plus this cluster's
+# changes, in one server-side apply. Replaces patches applied after the release
+# manifest, which a future upstream spec.strategy would conflict with.
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+resources:
+  - manifests.yaml
+configMapGenerator:
+  - name: kueue-manager-config
+    namespace: kueue-system
+    behavior: replace
+    files:
+      - controller_manager_config.yaml=manager-config.yaml
+    options:
+      # Same name as upstream; the manager rolls on a config change through the
+      # checksum annotation in manager-patch.yaml instead.
+      disableNameSuffixHash: true
+patches:
+  - path: manager-patch.yaml

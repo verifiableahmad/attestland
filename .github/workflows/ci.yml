@@ -27,14 +27,26 @@ jobs:
       - uses: actions/setup-python@v5
         with: {python-version: "3.12"}
       - run: pip install -r requirements-dev.txt
-      - run: source versions.env && bash -c "$(curl -sL https://get.containerlab.dev)" -- -v "$CONTAINERLAB_VERSION"
+      - name: containerlab (pinned release, checksum from versions.env)
+        run: |
+          source versions.env
+          deb=containerlab_${CONTAINERLAB_VERSION}_linux_amd64.deb
+          curl -fsSLo "/tmp/$deb" "https://github.com/srl-labs/containerlab/releases/download/v${CONTAINERLAB_VERSION}/$deb"
+          echo "$CONTAINERLAB_SHA256  /tmp/$deb" | sha256sum -c -
+          sudo apt-get install -y "/tmp/$deb"
       - run: make lab-image
       - run: make lab-up PY=python && make lab-test PY=python
   infra:
     runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v4
+      - run: grep '^OPENTOFU_VERSION=' versions.env >> "$GITHUB_ENV"
       - uses: opentofu/setup-opentofu@v1
-        with: {tofu_version: 1.10.6}
-      - run: for p in gpu-pool cc-pool; do tofu -chdir=infra/$p init -backend=false && tofu -chdir=infra/$p validate; done
+        with: {tofu_version: "${{ env.OPENTOFU_VERSION }}"}
+      # Every root module, so a change to one the pool does not use still gets checked.
+      - run: |
+          for p in infra/*/; do
+            [ -f "$p/main.tf" ] || continue
+            tofu -chdir="$p" init -backend=false -input=false && tofu -chdir="$p" validate
+          done
       - run: docker run --rm -v "$PWD/observability:/o" --entrypoint promtool prom/prometheus:v3.6.0 check rules /o/prometheus/rules/gpu.yml

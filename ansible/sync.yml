@@ -1,0 +1,9 @@
+# make sync: this working tree to /opt/al/repo on the control node, and its
+# venv. Nothing restarts and no pool changes: after a code edit, run this, not
+# `make configure`, which re-runs every role (NCCL-5, OPS-1).
+- name: Working tree to the control node
+  hosts: control
+  become: true
+  tasks:
+    - name: Copy the working tree and the venv
+      ansible.builtin.import_role: {name: shared, tasks_from: sync}

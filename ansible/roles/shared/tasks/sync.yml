@@ -1,0 +1,44 @@
+# This working tree (committed or not) to /opt/al/repo, and the venv the make
+# targets use. Also `make sync` (ansible/sync.yml), after a code edit.
+#
+# Excludes: what .gitignore keeps out of the repository (secrets, state, build
+# output) and the fetched kubeconfig. --delete: a file deleted or renamed here
+# is gone there too (I-7); result files live in /opt/al/results, outside the
+# tree, and chaos/log (written on the control node) is protected.
+- name: Copy the working tree
+  become: false
+  ansible.posix.synchronize:
+    src: "{{ playbook_dir }}/../"
+    dest: /opt/al/repo/
+    owner: false
+    group: false
+    delete: true
+    rsync_opts:
+      - --filter=P /chaos/log/
+      - --exclude=.venv
+      - --exclude=.terraform
+      - --exclude=*.tfstate*
+      - --exclude=*.tfvars
+      - --exclude=tfplan
+      - --exclude=clab-*
+      - --exclude=.env
+      - --exclude=secrets
+      - --exclude=*.pem
+      - --exclude=*.key
+      - --exclude=/bin
+      - --exclude=/out
+      - --exclude=/bench/results/logs
+      - --exclude=__pycache__
+      - --exclude=.pytest_cache
+      - --exclude=.DS_Store
+      - --exclude=ansible/inventory/*.ini
+      - --exclude=ansible/inventory/kubeconfig-*
+
+# What the make targets run outside a container: the result library
+# (jsonschema) and the serving sweep (PyYAML).
+- name: venv for the make targets
+  become: false
+  ansible.builtin.pip:
+    name: "{{ lookup('file', playbook_dir + '/../requirements-dev.txt').splitlines() | select('match', '^(PyYAML|jsonschema)==') | list }}"
+    virtualenv: /opt/al/repo/.venv
+    virtualenv_command: python3 -m venv

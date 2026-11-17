@@ -27,9 +27,25 @@ grafana_admin_password: "{{ lookup('env', 'AL_GRAFANA_PASSWORD') | default('chan
 alert_webhook_url: "{{ lookup('env', 'AL_ALERT_WEBHOOK_URL') | default('', true) }}"
 
 scratch_mount: /scratch
-# On the control node, NFS-mounted at the same paths on the GPU nodes (role shared).
-shared_dirs: [/opt/al/repo, "{{ scratch_mount }}/logs"]
+# Directories on /scratch (role scratch, recreated at every boot).
+scratch_layout: [ckpt, ckpt-bench, enroot, enroot/tmp, pyxis, logs, data, models, runs]
+# Result files (bench/lib/result.py reads AL_RESULTS_DIR): outside the working
+# tree, so the tree can be shared read-only and synced with --delete.
+results_dir: /opt/al/results
+# On the control node, NFS-mounted at the same paths on the GPU nodes (role
+# shared). The working tree is read-only there, so no job can rewrite a script
+# the control node runs later (SEC-6); /scratch/runs holds each training run's
+# progress log, which the goodput experiment reads on the control node (D-7).
+shared_dirs:
+  - {path: /opt/al/repo, mode: ro}
+  - {path: "{{ results_dir }}", mode: rw}
+  - {path: "{{ scratch_mount }}/logs", mode: rw}
+  - {path: "{{ scratch_mount }}/runs", mode: rw}
 textfile_dir: /var/lib/node_exporter/textfile
+
+# healthd only logs what it would drain until Phase 3 enforces it (D-5):
+# `export AL_HEALTHD_DRY_RUN=false` in .env, then `make configure POOL=gpu`.
+healthd_dry_run: "{{ lookup('env', 'AL_HEALTHD_DRY_RUN') | default('true', true) | bool }}"
 
 # Which scheduler owns each GPU node at first boot. pool-move changes it later.
 # Default: every node trains under Slurm except the last, which serves under k8s.

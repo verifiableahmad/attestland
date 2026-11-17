@@ -26,3 +26,16 @@
     src: "{{ playbook_dir }}/../sched/slurm/enroot.conf"
     dest: /etc/enroot/enroot.conf
     mode: "0644"
+
+# enroot.conf puts ENROOT_RUNTIME_PATH under /run/enroot, and enroot creates only
+# the per-user directory, as the job's user. /run is a tmpfs: recreate it at boot.
+- name: Enroot runtime directory at boot
+  ansible.builtin.copy:
+    content: "d /run/enroot 1777 root root -\n"
+    dest: /etc/tmpfiles.d/enroot.conf
+    mode: "0644"
+
+- name: Enroot runtime directory now
+  ansible.builtin.command: systemd-tmpfiles --create /etc/tmpfiles.d/enroot.conf
+  args:
+    creates: /run/enroot

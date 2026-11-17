@@ -1,0 +1,10 @@
+#!/bin/bash
+# Managed by Ansible (role scratch). The directories jobs expect on /scratch.
+#   enroot/tmp: enroot creates its cache and data paths but not ENROOT_TEMP_PATH
+#   pyxis: Pyxis runtime_path (plugstack.conf), each job's squashfs
+#   logs, runs: mount points for the control node's shares (role shared)
+set -euo pipefail
+for d in {{ scratch_layout | join(' ') }}; do
+  mkdir -p "{{ scratch_mount }}/$d"
+  chmod 1777 "{{ scratch_mount }}/$d"
+done

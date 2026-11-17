@@ -46,8 +46,10 @@ rules:
     description: PCIe replays above 10/min.
   - name: periodic-diag-failed
     severity: warning
-    # failed twice in a row: the diag runs every 30 min, so look at both of the last two results
-    expr: max_over_time(al_dcgm_diag_pass[65m]) == 0 and count_over_time(al_dcgm_diag_last_run_timestamp_seconds[65m]) > 0
+    # failed twice in a row: the diag runs every 30 min, so look at both of the last two results.
+    # It is skipped while the node is busy (periodic-diag.sh) and the last value then stays:
+    # changes() >= 1 means two separate runs, not one failure seen for an hour.
+    expr: max_over_time(al_dcgm_diag_pass[65m]) == 0 and changes(al_dcgm_diag_last_run_timestamp_seconds[65m]) >= 1
     for: 1
     action: drain_after_jobs
     description: dcgmi diag -r 1 failed on two consecutive runs.

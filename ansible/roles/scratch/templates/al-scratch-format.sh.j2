@@ -1,0 +1,23 @@
+#!/bin/bash
+# Managed by Ansible (role scratch). Give /scratch a filesystem labelled
+# al-scratch on the local instance store: make one when the disk is blank (a
+# new VM, or after a stop/start), label an unlabelled ext4 made before labels.
+# Never touches a disk that holds another filesystem.
+set -euo pipefail
+label=al-scratch
+blkid -L "$label" >/dev/null 2>&1 && { echo "present"; exit 0; }
+dev=""
+for _ in $(seq 60); do   # the NVMe can appear a little after early boot
+  for d in /dev/disk/by-id/nvme-Amazon_EC2_NVMe_Instance_Storage_*; do
+    [[ -e $d && $d != *-part* ]] && { dev=$(readlink -f "$d"); break 2; }
+  done
+  sleep 1
+done
+[[ -n $dev ]] || { echo "no instance store" >&2; exit 0; }
+type=$(blkid -p -o value -s TYPE "$dev" 2>/dev/null || true)
+case $type in
+  "")   mkfs.ext4 -q -L "$label" -E nodiscard -m 0 "$dev"; echo "made ext4 on $dev" ;;
+  ext4) e2label "$dev" "$label"; echo "labelled $dev" ;;
+  *)    echo "$dev holds $type, not touching it" >&2; exit 1 ;;
+esac
+udevadm settle

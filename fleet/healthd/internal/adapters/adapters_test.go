@@ -131,6 +131,23 @@ func TestSlurmDrainViaRestWithJWT(t *testing.T) {
 	}
 }
 
+func TestSlurmDrainNowSetsDownViaRest(t *testing.T) {
+	f := &fakeSlurmrestd{nodes: map[string]map[string]any{"al-gpu-01": {"name": "al-gpu-01", "state": []string{"ALLOCATED"}}}}
+	srv := httptest.NewServer(f)
+	defer srv.Close()
+	s := &Slurm{URL: srv.URL, APIVersion: "v0.0.42", User: "slurm", Key: jwtKey}
+	ctx := context.Background()
+	if err := s.Drain(ctx, "al-gpu-01", "healthd:xid79", health.DrainNow); err != nil {
+		t.Fatal(err)
+	}
+	if got := f.nodes["al-gpu-01"]["state"].([]string); got[len(got)-1] != "DOWN" {
+		t.Fatalf("state %v, want DOWN (slurmctld requeues the jobs)", got)
+	}
+	if st, _ := s.State(ctx, "al-gpu-01"); !st.Drained || st.Reason != "healthd:xid79" {
+		t.Fatalf("state %+v", st)
+	}
+}
+
 func TestSlurmFallsBackToScontrol(t *testing.T) {
 	f := &fakeSlurmrestd{down: true}
 	srv := httptest.NewServer(f)
@@ -150,8 +167,8 @@ func TestSlurmFallsBackToScontrol(t *testing.T) {
 	if err := s.Drain(context.Background(), "al-gpu-01", "healthd:xid79", health.DrainNow); err != nil {
 		t.Fatal(err)
 	}
-	want := []string{"scontrol update nodename=al-gpu-01 state=drain reason=healthd:xid79",
-		"squeue -h -w al-gpu-01 -t RUNNING -o %i", "scontrol requeue 101", "scontrol requeue 102"}
+	// DOWN: slurmctld kills and requeues the jobs itself (JobRequeue=1).
+	want := []string{"scontrol update nodename=al-gpu-01 state=down reason=healthd:xid79"}
 	if strings.Join(ran, "|") != strings.Join(want, "|") {
 		t.Fatalf("ran %q\nwant %q", ran, want)
 	}

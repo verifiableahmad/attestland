@@ -12,6 +12,7 @@ output "ansible_inventory" {
     ssh_private_key = trimsuffix(pathexpand(var.ssh_public_key_path), ".pub")
     region          = var.region
     gpu_type        = "${var.gpu_platform}/${var.gpu_preset}"
+    control_type    = "${var.control_platform}/${var.control_preset}"
     control         = { name = nebius_compute_v1_instance.control.name, id = nebius_compute_v1_instance.control.id, public = local.host.control.public, private = local.host.control.private }
     prefix          = local.bucket_prefix
     gpus            = [for g in nebius_compute_v1_instance.gpu : { name = g.name, id = g.id, public = local.host[g.name].public, private = local.host[g.name].private }]

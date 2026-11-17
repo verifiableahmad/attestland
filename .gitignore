@@ -28,3 +28,8 @@ ansible/inventory/*.ini
 ansible/inventory/kubeconfig-*
 !ansible/inventory/*.example
 .DS_Store
+
+# Plans written by `make infra-up` (may hold secrets in plain text).
+tfplan
+# Job logs pulled by `make results-pull` (large; the NCCL logs sit beside their result files).
+bench/results/logs/

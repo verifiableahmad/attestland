@@ -1,7 +1,8 @@
 # Per-SKU baselines. Thresholds are 90% of these values (spec 1.2).
 # status: placeholder -> estimate from public specs; replace with the median of
 # the phase 2 measurements (bench/results/burnin, bench/results/net) before
-# relying on burn-in verdicts.
+# relying on burn-in verdicts. A SKU not listed here falls back to its GPU
+# model (gpu_models, below; evaluate.py --gpu-model).
 skus:
   g6.2xlarge:               # 1x L4, 8 vCPU, 1x 450 GB NVMe instance store, 5 Gbps baseline / 10 burst (EC2 API)
     status: placeholder
@@ -13,6 +14,16 @@ skus:
     fio_randread_iops: 150000
     fio_randwrite_iops: 80000
     network_gbps: 5                   # sustained baseline; iperf3 may burst above it
+  g6.xlarge:                # 1x L4, 4 vCPU, 1x 250 GB NVMe instance store, 2.5 Gbps baseline / 10 burst (EC2 API)
+    status: placeholder
+    gpus: 1
+    nccl_intra_busbw_gbps: 0          # single GPU: not applicable
+    nccl_inter_busbw_gbps: 0.25       # NCCL over TCP on a 2.5 Gbps sustained link; estimate
+    fio_seqread_mibps: 320            # half the 450 GB disk of g6.2xlarge; estimate
+    fio_seqwrite_mibps: 175
+    fio_randread_iops: 75000
+    fio_randwrite_iops: 40000
+    network_gbps: 2.5                 # sustained baseline; burst credits drain under back-to-back runs
   Standard_NCC40ads_H100_v5:  # confidential pool; burn-in runs a subset there
     status: placeholder
     gpus: 1
@@ -23,3 +34,28 @@ skus:
     fio_randread_iops: 100000
     fio_randwrite_iops: 50000
     network_gbps: 40
+
+# Fallback by nvidia-smi GPU name, for instance types and presets with no entry
+# above (Nebius <platform>/<preset>, a new AWS size). The most conservative
+# figures for that GPU; disk and network numbers are deliberately low.
+gpu_models:
+  NVIDIA L4:
+    status: placeholder
+    gpus: 1
+    nccl_intra_busbw_gbps: 0
+    nccl_inter_busbw_gbps: 0.25
+    fio_seqread_mibps: 300
+    fio_seqwrite_mibps: 150
+    fio_randread_iops: 50000
+    fio_randwrite_iops: 25000
+    network_gbps: 2.5
+  NVIDIA L40S:
+    status: placeholder
+    gpus: 1
+    nccl_intra_busbw_gbps: 0
+    nccl_inter_busbw_gbps: 0.5
+    fio_seqread_mibps: 300            # Nebius network SSD boot disk, no local NVMe
+    fio_seqwrite_mibps: 150
+    fio_randread_iops: 20000
+    fio_randwrite_iops: 10000
+    network_gbps: 5

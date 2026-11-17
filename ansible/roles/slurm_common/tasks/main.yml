@@ -38,6 +38,7 @@
     owner: "{{ slurm_user }}"
     mode: "0600"
   no_log: true
+  register: slurm_jwt
 
 - name: Slurm configs
   ansible.builtin.template:

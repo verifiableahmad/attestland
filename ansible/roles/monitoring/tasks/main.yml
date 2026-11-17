@@ -34,7 +34,9 @@
     - {job: dcgm, hosts: "{{ groups['gpu'] }}", port: 9400}
     - {job: slurm, hosts: "{{ groups['control'] }}", port: 9341}
     - {job: healthd, hosts: "{{ groups['control'] }}", port: 30081}
-    - {job: vllm, hosts: "{{ groups['gpu'] }}", port: 30800}
+    # The NodePort answers on every node and forwards to the one vLLM pod:
+    # scraping it on each GPU node stored every series once per node (I-11).
+    - {job: vllm, hosts: "{{ groups['control'] }}", port: 30800}
     - {job: kueue, hosts: "{{ groups['control'] }}", port: 30443}
 
 - name: Grafana and Loki data ownership
@@ -81,9 +83,16 @@
     state: directory
     mode: "0755"
 
+- name: slurm-exporter release (checksum in versions.env)
+  ansible.builtin.get_url:
+    url: "https://github.com/rivosinc/prometheus-slurm-exporter/releases/download/v{{ slurm_exporter_version }}/prometheus-slurm-exporter_{{ slurm_exporter_version }}_linux_amd64.tar.gz"
+    dest: "/opt/al/dl/prometheus-slurm-exporter_{{ slurm_exporter_version }}_linux_amd64.tar.gz"
+    checksum: "sha256:{{ slurm_exporter_sha256 }}"
+    mode: "0644"
+
 - name: slurm-exporter binary
   ansible.builtin.unarchive:
-    src: "https://github.com/rivosinc/prometheus-slurm-exporter/releases/download/v{{ slurm_exporter_version }}/prometheus-slurm-exporter_{{ slurm_exporter_version }}_linux_amd64.tar.gz"
+    src: "/opt/al/dl/prometheus-slurm-exporter_{{ slurm_exporter_version }}_linux_amd64.tar.gz"
     dest: "/opt/al/slurm-exporter-{{ slurm_exporter_version }}"
     remote_src: true
     creates: "/opt/al/slurm-exporter-{{ slurm_exporter_version }}/prometheus-slurm-exporter"

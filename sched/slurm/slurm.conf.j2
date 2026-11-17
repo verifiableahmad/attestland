@@ -52,9 +52,14 @@ SchedulerParameters=bf_continue,bf_interval=30
 TopologyPlugin=topology/tree
 SlurmctldParameters=enable_configless
 
-# Node shape by instance type, 1x L4 each. Check with `slurmd -C`.
-#   g6.2xlarge: 8 vCPU (4 cores x 2 threads), 32 GiB
-#   g6.xlarge:  4 vCPU (2 cores x 2 threads), 16 GiB
-{% set shape = {'g6.2xlarge': {'cores': 4, 'mem': 30000}, 'g6.xlarge': {'cores': 2, 'mem': 15000}}[al_gpu_instance_type | default('g6.2xlarge')] %}
-NodeName={{ groups['gpu'] | join(',') }} CPUs={{ shape.cores * 2 }} Boards=1 SocketsPerBoard=1 CoresPerSocket={{ shape.cores }} ThreadsPerCore=2 RealMemory={{ shape.mem }} Gres=gpu:1 State=UNKNOWN
+# Node shape from the GPU nodes' own facts, so any instance type or preset works
+# (D-8): the smallest node, and 95% of its memory (slurmd -C reports a little
+# less than the instance size; a node that reports less than RealMemory is
+# drained as invalid). GPUs per node: al_gpus_per_node (inventory), default 1.
+{% set g = groups['gpu'] | map('extract', hostvars) | list %}
+{% set sockets = g | map(attribute='ansible_processor_count') | min %}
+{% set cores = g | map(attribute='ansible_processor_cores') | min %}
+{% set threads = g | map(attribute='ansible_processor_threads_per_core') | min %}
+{% set mem = ((g | map(attribute='ansible_memtotal_mb') | min) * 0.95) | int %}
+NodeName={{ groups['gpu'] | join(',') }} CPUs={{ sockets * cores * threads }} Boards=1 SocketsPerBoard={{ sockets }} CoresPerSocket={{ cores }} ThreadsPerCore={{ threads }} RealMemory={{ mem }} Gres=gpu:{{ al_gpus_per_node | default(1) }} State=UNKNOWN
 PartitionName={{ slurm_partition }} Nodes=ALL Default=YES MaxTime=INFINITE State=UP OverSubscribe=EXCLUSIVE

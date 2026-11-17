@@ -11,22 +11,37 @@
     - name: Build and import into containerd
       ansible.builtin.shell: |
         set -e
-        podman build -t localhost/healthd:local /opt/al/src/healthd
+        before=$(podman image inspect --format '{{ '{{' }}.Id{{ '}}' }}' localhost/healthd:local 2>/dev/null || true)
+        podman build -q -t localhost/healthd:local /opt/al/src/healthd >/dev/null
+        after=$(podman image inspect --format '{{ '{{' }}.Id{{ '}}' }}' localhost/healthd:local)
+        if [ "$before" = "$after" ] && ctr -n k8s.io images ls -q | grep -qx localhost/healthd:local; then echo same; exit 0; fi
         rm -f /tmp/healthd.tar
         podman save localhost/healthd:local -o /tmp/healthd.tar
         ctr -n k8s.io images import /tmp/healthd.tar
-      changed_when: true
+        echo new
+      register: al_healthd_image
+      changed_when: "'new' in al_healthd_image.stdout"
 
+# Dry run until Phase 3 (group_vars/all: healthd_dry_run, AL_HEALTHD_DRY_RUN;
+# D-5). Restarted only when the image, rules or key changed (OPS-1); a changed
+# Deployment rolls by itself.
 - name: Namespace, RBAC, Deployment
   ansible.builtin.shell: |
+    set -euo pipefail
     sed -e "s#HEALTHD_IMAGE#{{ healthd_image | default('localhost/healthd:local', true) }}#" \
         -e "s#CONTROL_IP#{{ control_private_ip }}#g" \
-        -e "s#DRY_RUN#{{ healthd_dry_run | default(false) | string | lower }}#" \
+        -e "s#DRY_RUN#{{ healthd_dry_run | bool | string | lower }}#" \
         /opt/al/src/healthd/deploy/healthd.yaml > /opt/al/k8s/healthd.yaml
     kubectl apply -f /opt/al/k8s/healthd.yaml
-    kubectl -n fleet-system create configmap healthd-rules --from-file=rules.yaml=/opt/al/src/healthd/rules.yaml \
-      --dry-run=client -o yaml | kubectl apply -f -
-    kubectl -n fleet-system create secret generic healthd-slurm-jwt --from-file=jwt_hs256.key=/etc/slurm/jwt_hs256.key \
-      --dry-run=client -o yaml | kubectl apply -f -
-    kubectl -n fleet-system rollout restart deploy/healthd
-  changed_when: true
+    out=$(kubectl -n fleet-system create configmap healthd-rules --from-file=rules.yaml=/opt/al/src/healthd/rules.yaml \
+      --dry-run=client -o yaml | kubectl apply -f -)
+    out+=" "$(kubectl -n fleet-system create secret generic healthd-slurm-jwt --from-file=jwt_hs256.key=/etc/slurm/jwt_hs256.key \
+      --dry-run=client -o yaml | kubectl apply -f -)
+    if [[ $out == *configured* || $out == *created* || "{{ al_healthd_image.changed | default(false) }}" == True ]]; then
+      kubectl -n fleet-system rollout restart deploy/healthd
+      echo restarted
+    fi
+  args:
+    executable: /bin/bash
+  register: al_healthd
+  changed_when: "'restarted' in al_healthd.stdout"

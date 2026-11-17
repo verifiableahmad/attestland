@@ -14,9 +14,15 @@
 - name: Build and install
   when: slurm_v.rc != 0 or slurm_version not in slurm_v.stdout
   block:
-    - name: Fetch tarball
+    - name: Fetch tarball (checksum in versions.env)
+      ansible.builtin.get_url:
+        url: "https://download.schedmd.com/slurm/slurm-{{ slurm_version }}.tar.bz2"
+        dest: "/usr/src/slurm-{{ slurm_version }}.tar.bz2"
+        checksum: "sha256:{{ slurm_sha256 }}"
+        mode: "0644"
+    - name: Unpack tarball
       ansible.builtin.unarchive:
-        src: "https://download.schedmd.com/slurm/slurm-{{ slurm_version }}.tar.bz2"
+        src: "/usr/src/slurm-{{ slurm_version }}.tar.bz2"
         dest: /usr/src
         remote_src: true
     - name: Configure, make, install
@@ -30,3 +36,6 @@
         make install
         ldconfig
       changed_when: true
+    - name: Note the new build (the controller daemons restart on it)
+      ansible.builtin.set_fact:
+        slurm_build_changed: true

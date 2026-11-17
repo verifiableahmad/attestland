@@ -1,36 +1,70 @@
 # make burnin: run the burn-in pipeline on every GPU node (or -l <node>).
-- hosts: gpu
+# One node at a time (I-20): its inter-node checks need a peer that runs
+# nothing else, and two nodes under test at once would load each other and
+# kill each other's iperf3. Both are held out of their schedulers meanwhile.
+- name: Burn-in SSH key between the GPU nodes
+  hosts: control:gpu
   become: true
-  serial: 2   # pairs: the inter-node check needs a known-good peer
+  roles: [cluster_ssh]
+
+- name: Burn-in
+  hosts: gpu
+  become: true
+  serial: 1
+  vars:
+    peer: "{{ burnin_peer | default(groups['gpu'] | difference([inventory_hostname]) | first) }}"
   tasks:
+    - name: burnin-hold helper on the control node
+      delegate_to: "{{ groups['control'][0] }}"
+      run_once: true
+      ansible.builtin.copy:
+        src: "{{ playbook_dir }}/../fleet/burnin/burnin-hold"
+        dest: /opt/al/bin/burnin-hold
+        mode: "0755"
     - name: Copy burn-in pipeline
       ansible.builtin.copy:
         src: "{{ playbook_dir }}/../fleet/burnin/"
         dest: /opt/al/burnin/
         mode: preserve
-    - name: Run burn-in
-      ansible.builtin.command:
-        cmd: >-
-          /opt/al/burnin/burnin.sh
-          --peer {{ hostvars[burnin_peer | default(groups['gpu'] | difference([inventory_hostname]) | first)].private_ip }}
-          --sku {{ al_gpu_instance_type }}
-          --report /var/lib/fleet/burnin-report.json
-      register: burnin
-      changed_when: true
-      failed_when: false
-    - name: Fetch report
-      ansible.builtin.fetch:
-        src: /var/lib/fleet/burnin-report.json
-        dest: "{{ playbook_dir }}/../bench/results/burnin/{{ inventory_hostname }}-report.json"
-        flat: true
-    - name: Report to the control VM
-      delegate_to: "{{ groups['control'][0] }}"
-      ansible.builtin.copy:
-        src: "{{ playbook_dir }}/../bench/results/burnin/{{ inventory_hostname }}-report.json"
-        dest: /var/lib/fleet/reports/{{ inventory_hostname }}.json
-        mode: "0644"
-    - name: Apply verdict to both schedulers
-      delegate_to: "{{ groups['control'][0] }}"
-      ansible.builtin.command:
-        cmd: /opt/al/bin/fleet-label {{ inventory_hostname }} {{ 'passed' if burnin.rc == 0 else 'failed' }} /var/lib/fleet/reports/{{ inventory_hostname }}.json
-      changed_when: true
+    - name: Burn-in with the node and its peer held
+      block:
+        - name: Hold the node and its peer out of their schedulers
+          delegate_to: "{{ groups['control'][0] }}"
+          ansible.builtin.command: /opt/al/bin/burnin-hold hold {{ item }}
+          loop: ["{{ inventory_hostname }}", "{{ peer }}"]
+          changed_when: true
+        - name: Run burn-in
+          ansible.builtin.command:
+            cmd: >-
+              /opt/al/burnin/burnin.sh
+              --peer {{ hostvars[peer].private_ip }}
+              --sku {{ al_gpu_instance_type }}
+              --report /var/lib/fleet/burnin-report.json
+          register: burnin
+          changed_when: true
+          failed_when: false
+        - name: Fetch report
+          ansible.builtin.fetch:
+            src: /var/lib/fleet/burnin-report.json
+            dest: "{{ playbook_dir }}/../bench/results/burnin/{{ inventory_hostname }}-report.json"
+            flat: true
+        - name: Report to the control VM
+          delegate_to: "{{ groups['control'][0] }}"
+          ansible.builtin.copy:
+            src: "{{ playbook_dir }}/../bench/results/burnin/{{ inventory_hostname }}-report.json"
+            dest: /var/lib/fleet/reports/{{ inventory_hostname }}.json
+            mode: "0644"
+        # Passed: back into its own pool. Failed (exit 1): drained, state Repair,
+        # and the next node still gets its burn-in.
+        - name: Apply verdict to both schedulers
+          delegate_to: "{{ groups['control'][0] }}"
+          ansible.builtin.command:
+            cmd: /opt/al/bin/fleet-label {{ inventory_hostname }} {{ 'passed' if burnin.rc == 0 else 'failed' }} /var/lib/fleet/reports/{{ inventory_hostname }}.json
+          register: al_verdict
+          changed_when: true
+          failed_when: al_verdict.rc not in [0, 1]
+      always:
+        - name: Give the peer back
+          delegate_to: "{{ groups['control'][0] }}"
+          ansible.builtin.command: /opt/al/bin/burnin-hold release {{ peer }}
+          changed_when: true

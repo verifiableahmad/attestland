@@ -12,12 +12,11 @@
   vars:
     svc_name: alloy
     svc_image: "{{ alloy_image }}"
-    svc_volumes:
-      - /etc/fleet/config.alloy:/etc/alloy/config.alloy:ro
-      - /var/log:/var/log:ro
-      - /run/log/journal:/run/log/journal:ro
-      - /etc/machine-id:/etc/machine-id:ro
-      - "{{ scratch_mount }}/logs:/scratch/logs:ro"
+    # Job logs are tailed on the control node only (config.alloy.j2). On a GPU
+    # node /scratch/logs does not exist yet when this play runs (I-9).
+    svc_volumes: "{{ ['/etc/fleet/config.alloy:/etc/alloy/config.alloy:ro', '/var/log:/var/log:ro',
+                      '/run/log/journal:/run/log/journal:ro', '/etc/machine-id:/etc/machine-id:ro']
+                     + ([scratch_mount ~ '/logs:/scratch/logs:ro'] if 'control' in group_names else []) }}"
     svc_command: "run /etc/alloy/config.alloy --storage.path=/var/lib/alloy"
 
 - name: Restart Alloy after a config change

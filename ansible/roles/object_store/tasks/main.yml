@@ -1,5 +1,5 @@
 # Durable tier settings (ADR 010): an env file the training scripts source.
-# Buckets are created by tofu (infra/gpu-pool/storage.tf); credentials come from
+# Buckets are created by tofu (infra/durable); credentials come from
 # the node's instance role, so the file holds no secret. On Nebius (ADR 013) it
 # also holds the endpoint and the S3 key (ckpt.py reads AL_S3_*), readable only
 # by root and the job user.

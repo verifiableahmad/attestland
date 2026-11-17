@@ -1,0 +1,14 @@
+# Managed by Ansible (role scratch).
+[Unit]
+Description=Filesystem on the instance store for {{ scratch_mount }}
+DefaultDependencies=no
+After=systemd-udev-settle.service
+Before={{ scratch_mount | regex_replace('^/', '') | replace('/', '-') }}.mount local-fs.target
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+ExecStart=/opt/al/bin/al-scratch-format
+
+[Install]
+WantedBy=local-fs.target

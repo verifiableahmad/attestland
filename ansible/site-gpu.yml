@@ -1,5 +1,36 @@
 # make up POOL=gpu: configure control and GPU nodes.
-- name: Working tree and job logs on the control node, exported over NFS
+- name: Preflight
+  hosts: all
+  gather_facts: false
+  become: true
+  tasks:
+    # Before anything writes them: an empty key breaks munge, slurmctld,
+    # slurmrestd and healthd far from here (docs/runbook.md, Phase 2 step 2).
+    - name: Cluster secrets are set (. ./.env)
+      run_once: true
+      ansible.builtin.assert:
+        that:
+          - munge_key_b64 | length > 0
+          - (munge_key_b64 | b64decode | length) >= 32
+          - slurm_jwt_key_b64 | length > 0
+          - (slurm_jwt_key_b64 | b64decode | length) >= 32
+        fail_msg: AL_MUNGE_KEY_B64 and AL_SLURM_JWT_KEY_B64 must be set and at least 32 bytes decoded; source .env.
+        quiet: true
+    - name: Wait for SSH
+      ansible.builtin.wait_for_connection:
+        timeout: 600
+    # On a fresh boot cloud-init and apt-daily hold the dpkg lock for minutes.
+    - name: cloud-init finished
+      ansible.builtin.command: cloud-init status --wait
+      changed_when: false
+      failed_when: false
+    - name: No apt timers or unattended upgrades while the roles install pinned versions
+      ansible.builtin.shell: |
+        systemctl disable --now apt-daily.timer apt-daily-upgrade.timer 2>/dev/null || true
+        systemctl stop apt-daily.service apt-daily-upgrade.service unattended-upgrades.service 2>/dev/null || true
+      changed_when: false
+
+- name: Working tree, results and job logs on the control node, exported over NFS
   hosts: control
   become: true
   roles: [shared]
@@ -9,12 +40,17 @@
   become: true
   roles: [common, node_exporter, alloy, object_store]
 
+- name: SSH between nodes (al from the control node; root between GPU nodes for burn-in)
+  hosts: control:gpu
+  become: true
+  roles: [cluster_ssh]
+
 - name: GPU software stack
   hosts: gpu
   become: true
   roles: [nvidia_driver, cuda_nccl, container_toolkit, dcgm, scratch, dcgm_exporter, slurm_build, enroot_pyxis, node_agent]
   tasks:
-    - name: Working tree and job logs from the control node
+    - name: Working tree, results and job logs from the control node
       ansible.builtin.import_role: {name: shared, tasks_from: mount}
 
 - name: Slurm
@@ -26,6 +62,10 @@
   hosts: control
   become: true
   roles: [awscli, topology, slurm_controller]
+  tasks:
+    # sbatch and srun parse --container-image on the host they are typed on (D-7).
+    - name: Pyxis on the login node too
+      ansible.builtin.import_role: {name: enroot_pyxis, tasks_from: pyxis}
 
 - name: Slurm nodes
   hosts: gpu

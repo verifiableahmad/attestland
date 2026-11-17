@@ -25,7 +25,7 @@ type Slurm struct {
 	User       string // token subject (sun)
 	Key        []byte // jwt_hs256.key
 	Client     *http.Client
-	// Exec runs scontrol/squeue for the fallback path; nil disables the fallback.
+	// Exec runs scontrol for the fallback path; nil disables the fallback.
 	Exec func(ctx context.Context, name string, args ...string) ([]byte, error)
 }
 
@@ -90,37 +90,25 @@ func (s *Slurm) do(ctx context.Context, method, path string, body any) ([]byte, 
 	return out, nil
 }
 
-// Drain sets DRAIN with reason healthd:<rule>. DrainNow also requeues jobs
-// running on the node (they would die with the GPU anyway).
+// Drain sets DRAIN with reason healthd:<rule>. DrainNow sets DOWN instead:
+// slurmctld then kills the node's jobs and, with JobRequeue=1 (slurm.conf),
+// requeues every batch job that allows it, through slurmrestd alone. healthd's
+// image has no scontrol, so requeueing job by job never ran (I-14). A node set
+// DOWN by an admin stays DOWN (ReturnToService=1 covers only unresponsive ones).
 func (s *Slurm) Drain(ctx context.Context, node, reason string, mode health.DrainMode) error {
+	state := "DRAIN"
+	if mode == health.DrainNow {
+		state = "DOWN"
+	}
 	_, err := s.do(ctx, http.MethodPost, "/node/"+node, map[string]any{
-		"state": []string{"DRAIN"}, "reason": reason,
+		"state": []string{state}, "reason": reason,
 	})
 	if err != nil {
 		if s.Exec == nil {
 			return err
 		}
-		if out, ferr := s.Exec(ctx, "scontrol", "update", "nodename="+node, "state=drain", "reason="+reason); ferr != nil {
+		if out, ferr := s.Exec(ctx, "scontrol", "update", "nodename="+node, "state="+strings.ToLower(state), "reason="+reason); ferr != nil {
 			return fmt.Errorf("rest: %v; scontrol: %v %s", err, ferr, out)
-		}
-	}
-	if mode == health.DrainNow {
-		return s.requeueJobsOn(ctx, node)
-	}
-	return nil
-}
-
-func (s *Slurm) requeueJobsOn(ctx context.Context, node string) error {
-	if s.Exec == nil {
-		return nil
-	}
-	out, err := s.Exec(ctx, "squeue", "-h", "-w", node, "-t", "RUNNING", "-o", "%i")
-	if err != nil {
-		return fmt.Errorf("squeue: %v %s", err, out)
-	}
-	for _, id := range strings.Fields(string(out)) {
-		if o, err := s.Exec(ctx, "scontrol", "requeue", id); err != nil {
-			return fmt.Errorf("requeue %s: %v %s", id, err, o)
 		}
 	}
 	return nil

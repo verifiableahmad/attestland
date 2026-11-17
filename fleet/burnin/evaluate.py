@@ -22,13 +22,25 @@ HERE = Path(__file__).resolve().parent
 
 
 def load_env(path: Path) -> dict[str, str]:
+    """versions.env. Same rule as bench/lib/result.py parse_env (this file is
+    copied to the nodes on its own): a comment starts at a "#" that begins a word."""
     out = {}
     for line in path.read_text().splitlines():
-        line = line.split("#", 1)[0].strip()
+        line = re.sub(r"(^|\s)#.*$", "", line).strip()
         if "=" in line:
             k, v = line.split("=", 1)
             out[k.strip()] = v.strip()
     return out
+
+
+def baseline(baselines: dict, sku: str, gpu_model: str | None) -> tuple[dict, str]:
+    """The SKU's baseline, else the GPU model's (a pool on an instance type that
+    has not been measured yet, or another cloud's preset names)."""
+    if sku in baselines.get("skus", {}):
+        return baselines["skus"][sku], f"sku:{sku}"
+    if gpu_model and gpu_model in baselines.get("gpu_models", {}):
+        return baselines["gpu_models"][gpu_model], f"gpu_model:{gpu_model}"
+    raise SystemExit(f"no baseline for sku {sku!r} or GPU model {gpu_model!r} in baselines.yaml")
 
 
 def check(name: str, passed: bool, **detail) -> dict:
@@ -155,8 +167,8 @@ def software(raw: Path, versions: dict) -> dict:
 # --- report ------------------------------------------------------------------
 
 def evaluate(raw: Path, sku: str, baselines: dict, versions: dict, fleet_median: float | None,
-             ngpus: int, mtu: int, node: str) -> dict:
-    base = baselines["skus"][sku]
+             ngpus: int, mtu: int, node: str, gpu_model: str | None = None) -> dict:
+    base, base_key = baseline(baselines, sku, gpu_model)
     checks = [
         gpu_diag(raw), memory_health(raw), sustained_load(raw),
         intra_nccl(raw, base, ngpus), inter_nccl(raw, fleet_median, base),
@@ -164,7 +176,7 @@ def evaluate(raw: Path, sku: str, baselines: dict, versions: dict, fleet_median:
     ]
     report = {
         "node": node, "sku": sku, "time": time.time(),
-        "baseline_status": base.get("status", "unknown"),
+        "baseline": base_key, "baseline_status": base.get("status", "unknown"),
         "pass": all(c["pass"] for c in checks), "checks": checks,
     }
     body = json.dumps(report, sort_keys=True).encode()
@@ -178,6 +190,7 @@ def main() -> int:
     ap.add_argument("--sku", required=True)
     ap.add_argument("--node", required=True)
     ap.add_argument("--ngpus", type=int, required=True)
+    ap.add_argument("--gpu-model", default=None, help="nvidia-smi name; baseline fallback for unknown SKUs")
     ap.add_argument("--mtu", type=int, default=9001)
     ap.add_argument("--fleet-median-busbw", type=float, default=None)
     ap.add_argument("--baselines", type=Path, default=HERE / "baselines.yaml")
@@ -186,7 +199,7 @@ def main() -> int:
     ap.add_argument("--textfile", type=Path, default=None)
     a = ap.parse_args()
     r = evaluate(a.raw, a.sku, yaml.safe_load(a.baselines.read_text()), load_env(a.versions),
-                 a.fleet_median_busbw, a.ngpus, a.mtu, a.node)
+                 a.fleet_median_busbw, a.ngpus, a.mtu, a.node, a.gpu_model)
     a.report.parent.mkdir(parents=True, exist_ok=True)
     a.report.write_text(json.dumps(r, indent=2) + "\n")
     if a.textfile and a.textfile.parent.is_dir():

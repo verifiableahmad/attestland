@@ -1,0 +1,37 @@
+#!/usr/bin/env bash
+# burnin-hold hold|release <node>: take a node out of its scheduler for burn-in
+# (as the node under test or as its peer) and give it back. Runs on the control
+# node (ansible/burnin.yml). hold waits until the node runs nothing: dcgmi diag,
+# the stress test and iperf3 need the GPU and the link to themselves (I-20).
+#   Slurm pool: drain with reason burnin:hold; release resumes it only if that
+#               is still the reason (healthd or burn-in itself may have drained it since).
+#   k8s pool:   cordon and evict (kubectl drain); release uncordons, unless
+#               healthd tainted it meanwhile.
+set -euo pipefail
+action=${1:?hold|release} node=${2:?node}
+timeout=${BURNIN_HOLD_TIMEOUT:-3600}
+pool=$(kubectl get node "$node" -o jsonpath='{.metadata.labels.fleet\.attestland/pool}' 2>/dev/null || true)
+reason=$(scontrol show node "$node" -o | grep -o 'Reason=[^ ]*' | cut -d= -f2- | cut -d'[' -f1 || true)
+log() { printf '%s burnin-hold %s %s (pool %s): %s\n' "$(date -u +%H:%M:%S)" "$action" "$node" "${pool:-none}" "$*"; }
+
+case $action/$pool in
+  hold/k8s)
+    kubectl cordon "$node" >/dev/null
+    kubectl drain "$node" --ignore-daemonsets --delete-emptydir-data --timeout="${timeout}s" >/dev/null
+    log "cordoned and drained" ;;
+  hold/*)
+    # A node that is already drained (by healthd, or pool=k8s) keeps its reason.
+    [[ -n $reason && $reason != none && $reason != "(null)" ]] || scontrol update nodename="$node" state=drain reason=burnin:hold
+    deadline=$(( $(date +%s) + timeout ))
+    while [[ -n $(squeue -h -w "$node" -o %i) ]]; do
+      (( $(date +%s) < deadline )) || { log "timeout waiting for jobs" >&2; exit 4; }
+      sleep 10
+    done
+    log "drained, no jobs" ;;
+  release/k8s)
+    taints=$(kubectl get node "$node" -o jsonpath='{.spec.taints[*].key}')
+    if [[ $taints == *fleet.attestland/unhealthy* ]]; then log "left cordoned: healthd taint"; else kubectl uncordon "$node" >/dev/null; log "uncordoned"; fi ;;
+  release/*)
+    if [[ $reason == burnin:hold ]]; then scontrol update nodename="$node" state=resume; log "resumed"; else log "left as is (reason ${reason:-none})"; fi ;;
+  *) echo "usage: $0 hold|release <node>" >&2; exit 2 ;;
+esac

@@ -319,7 +319,7 @@ design note (ADR 007).
 | Component | What it is | Why this choice |
 | --- | --- | --- |
 | **Node-local NVMe** (`/scratch`) | Fast disk inside each GPU VM | Saving to local disk takes seconds, so the training pause is short. It disappears with the VM, so it is only the first copy. |
-| **S3 buckets** (`infra/gpu-pool/storage.tf`) | AWS's object store | The durable copy of checkpoints, datasets, models and receipts. There is no storage server to run or patch, and nodes use their instance role, so there are no keys to leak. It replaced MinIO, whose community edition is archived (ADR 008, ADR 010). |
+| **S3 buckets** (`infra/durable`) | AWS's object store | The durable copy of checkpoints, datasets, models and receipts. There is no storage server to run or patch, and nodes use their instance role, so there are no keys to leak. It replaced MinIO, whose community edition is archived (ADR 008, ADR 010). |
 | **PyTorch Distributed Checkpoint (DCP)** | Saves and loads distributed training state | The native PyTorch format, and it can save in the background. Each node keeps a full copy, so a surviving node restores from its own disk and a replacement node downloads from S3. |
 | **Young–Daly interval** (`storage/interval.py`) | Computes how often to checkpoint | Uses the measured save time and a failure rate to pick the interval that wastes the least time; the result feeds the goodput experiment. |
 

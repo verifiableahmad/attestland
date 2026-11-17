@@ -49,9 +49,17 @@
     group: "{{ ansible_user }}"
     mode: "0600"
 
+- name: Calico manifest (checksum in versions.env)
+  ansible.builtin.get_url:
+    url: https://raw.githubusercontent.com/projectcalico/calico/{{ calico_version }}/manifests/calico.yaml
+    dest: /opt/al/dl/calico-{{ calico_version }}.yaml
+    checksum: "sha256:{{ calico_manifest_sha256 }}"
+    mode: "0644"
+
 - name: Calico CNI
-  ansible.builtin.command: kubectl apply -f https://raw.githubusercontent.com/projectcalico/calico/{{ calico_version }}/manifests/calico.yaml
-  changed_when: true
+  ansible.builtin.command: kubectl apply -f /opt/al/dl/calico-{{ calico_version }}.yaml
+  register: al_calico
+  changed_when: "'configured' in al_calico.stdout or 'created' in al_calico.stdout"
 
 - name: Join command for workers
   ansible.builtin.command: kubeadm token create --print-join-command --ttl 1h
@@ -67,3 +75,13 @@
     src: /etc/kubernetes/admin.conf
     dest: "{{ playbook_dir }}/../secrets/kubeconfig-{{ al_cloud }}"
     flat: true
+
+# admin.conf names the private address, which the laptop cannot reach; the API
+# certificate also carries the public one (--apiserver-cert-extra-sans) (I-10).
+- name: Laptop kubeconfig points at the public address
+  delegate_to: localhost
+  become: false
+  ansible.builtin.replace:
+    path: "{{ playbook_dir }}/../secrets/kubeconfig-{{ al_cloud }}"
+    regexp: 'server: https://[^:]+:6443'
+    replace: "server: https://{{ ansible_host }}:6443"

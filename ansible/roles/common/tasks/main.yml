@@ -1,13 +1,17 @@
+# First, before any install (the preflight play has stopped its timers): it
+# would move pinned versions and hold the dpkg lock while the roles run (I-4).
+- name: Stop unattended upgrades from moving pinned versions
+  ansible.builtin.apt:
+    name: unattended-upgrades
+    state: absent
+    lock_timeout: 600
+
 - name: Base packages
   ansible.builtin.apt:
     name: [chrony, jq, curl, fio, iperf3, numactl, pciutils, podman, python3-pip, nvme-cli, mdadm, ethtool, iproute2, build-essential, git]
     update_cache: true
     cache_valid_time: 3600
-
-- name: Stop unattended upgrades from moving pinned versions
-  ansible.builtin.apt:
-    name: unattended-upgrades
-    state: absent
+    lock_timeout: 600
 
 - name: Keep cloud-init from resetting the hostname on reboot
   ansible.builtin.copy:
@@ -63,3 +67,23 @@
     src: "{{ playbook_dir }}/../versions.env"
     dest: /etc/fleet/versions.env
     mode: "0644"
+
+# What this node is, for result files written here or from here
+# (bench/lib/result.py detect_hardware; NCCL-4).
+- name: Node description
+  ansible.builtin.copy:
+    dest: /etc/fleet/node.env
+    mode: "0644"
+    content: |
+      AL_CLOUD={{ al_cloud }}
+      AL_REGION={{ al_region }}
+      AL_INSTANCE_TYPE={{ al_gpu_instance_type if 'gpu' in group_names else (al_control_instance_type | default('unknown')) }}
+
+# Login shells (make control-ssh) and the jobs they submit, which inherit the
+# environment: result files go to the shared results directory.
+- name: Results directory for login shells
+  ansible.builtin.copy:
+    dest: /etc/profile.d/al.sh
+    mode: "0644"
+    content: |
+      export AL_RESULTS_DIR={{ results_dir }}

@@ -1,15 +1,23 @@
-- name: Enroot packages
+- name: Download directory
+  ansible.builtin.file:
+    path: /opt/al/dl
+    state: directory
+    mode: "0755"
+
+- name: Enroot packages (checksums in versions.env)
+  ansible.builtin.get_url:
+    url: "https://github.com/NVIDIA/enroot/releases/download/v{{ enroot_version }}/{{ item.pkg }}_{{ enroot_version }}-1_amd64.deb"
+    dest: "/opt/al/dl/{{ item.pkg }}_{{ enroot_version }}-1_amd64.deb"
+    checksum: "sha256:{{ item.sha256 }}"
+    mode: "0644"
+  loop:
+    - {pkg: enroot, sha256: "{{ enroot_sha256 }}"}
+    - {pkg: enroot+caps, sha256: "{{ enroot_caps_sha256 }}"}
+
+- name: Install enroot
   ansible.builtin.apt:
-    deb: "https://github.com/NVIDIA/enroot/releases/download/v{{ enroot_version }}/{{ item }}_{{ enroot_version }}-1_amd64.deb"
+    deb: "/opt/al/dl/{{ item }}_{{ enroot_version }}-1_amd64.deb"
   loop: [enroot, enroot+caps]
 
-- name: Pyxis source
-  ansible.builtin.git:
-    repo: https://github.com/NVIDIA/pyxis.git
-    dest: /usr/src/pyxis
-    version: "v{{ pyxis_version }}"
-
-- name: Build and install Pyxis
-  ansible.builtin.shell: make -C /usr/src/pyxis && make -C /usr/src/pyxis install prefix=/usr/local
-  args:
-    creates: /usr/local/lib/slurm/spank_pyxis.so
+- name: Pyxis
+  ansible.builtin.import_tasks: pyxis.yml

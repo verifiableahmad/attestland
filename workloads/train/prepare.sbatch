@@ -18,7 +18,8 @@ set -a; source /etc/fleet/s3.env; set +a   # AL_S3_REGION, AL_BUCKET_PREFIX (cre
 
 prepare() {  # prepare <tasks> <prepare.py arguments>
   local n=$1; shift
-  srun -N "$n" -n "$n" --container-image="$PYTORCH_IMAGE" \
+  # enroot names a registry with "#": nvcr.io/nvidia/pytorch:tag -> nvcr.io#nvidia/pytorch:tag
+  srun -N "$n" -n "$n" --container-image="${PYTORCH_IMAGE/\//#}" \
        --container-mounts=/scratch:/scratch,$REPO:$REPO \
        --container-workdir="$REPO" \
        --export=ALL \

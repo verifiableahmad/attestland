@@ -24,25 +24,26 @@ provider "aws" {
   }
 }
 
-# Ubuntu 22.04 (ADR 009).
+# Ubuntu 22.04 (ADR 009), the build pinned in versions.env (AWS_AMI_NAME).
 data "aws_ami" "ubuntu" {
-  most_recent = true
-  owners      = ["099720109477"] # Canonical
+  owners = ["099720109477"] # Canonical
   filter {
     name   = "name"
-    values = ["ubuntu/images/hvm-ssd/ubuntu-jammy-22.04-amd64-server-*"]
+    values = [local.versions.AWS_AMI_NAME]
   }
 }
 
 locals {
   versions = { for l in regexall("(?m)^([A-Z0-9_]+)=([^\\s#]+)", file("${path.module}/../../versions.env")) : l[0] => l[1] }
   user_data = templatefile("${path.module}/cloud-init.yaml.tftpl", {
-    ssh_user       = var.ssh_user
-    ssh_public_key = trimspace(file(pathexpand(var.ssh_public_key_path)))
-    containerlab   = local.versions.CONTAINERLAB_VERSION
-    k3d            = local.versions.K3D_VERSION
-    helm           = local.versions.HELM_VERSION
-    kubectl        = local.versions.KUBERNETES_VERSION
+    ssh_user            = var.ssh_user
+    ssh_public_key      = trimspace(file(pathexpand(var.ssh_public_key_path)))
+    containerlab        = local.versions.CONTAINERLAB_VERSION
+    containerlab_sha256 = local.versions.CONTAINERLAB_SHA256
+    k3d                 = local.versions.K3D_VERSION
+    helm                = local.versions.HELM_VERSION
+    helm_sha256         = local.versions.HELM_SHA256
+    kubectl             = local.versions.KUBERNETES_VERSION
   })
 }
 

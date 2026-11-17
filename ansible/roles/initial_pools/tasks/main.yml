@@ -1,5 +1,14 @@
-# Give each GPU node to exactly one scheduler (group_vars/gpu.yml: pool).
-- name: Assign pools
-  ansible.builtin.command: /opt/al/bin/pool-move {{ item }} {{ hostvars[item].pool }} --no-wait
+# Give each GPU node to exactly one scheduler (group_vars/gpu.yml: pool), once:
+# a node that already has a pool label keeps it. After first boot only pool-move
+# changes pools, so `make configure` no longer undoes a move (NCCL-5).
+- name: Assign pools (first boot only)
+  ansible.builtin.shell: |
+    set -euo pipefail
+    cur=$(kubectl get node {{ item }} -o jsonpath='{.metadata.labels.fleet\.attestland/pool}')
+    if [ -n "$cur" ]; then echo "keep $cur"; exit 0; fi
+    /opt/al/bin/pool-move {{ item }} {{ hostvars[item].pool }} --no-wait
+  args:
+    executable: /bin/bash
   loop: "{{ groups['gpu'] }}"
-  changed_when: true
+  register: al_pools
+  changed_when: "'keep' not in al_pools.stdout"

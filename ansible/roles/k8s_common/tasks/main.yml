@@ -47,12 +47,17 @@
   register: ctd
 
 - name: NVIDIA runtime in containerd (host toolkit; GPU Operator toolkit disabled)
-  ansible.builtin.command: nvidia-ctk runtime configure --runtime=containerd --set-as-default=false --cdi.enabled
+  ansible.builtin.shell: |
+    grep -q 'runtimes.nvidia\]' /etc/containerd/config.toml && { echo present; exit 0; }
+    nvidia-ctk runtime configure --runtime=containerd --set-as-default=false --cdi.enabled
   when: "'gpu' in group_names"
-  changed_when: true
+  register: al_ctk
+  changed_when: "'present' not in al_ctk.stdout"
 
+# Restarted only when its configuration changed: every restart restarts the
+# pods' containers on this node (OPS-1).
 - name: containerd running
   ansible.builtin.systemd:
     name: containerd
     enabled: true
-    state: restarted
+    state: "{{ 'restarted' if ctd.changed or (al_ctk.changed | default(false)) else 'started' }}"

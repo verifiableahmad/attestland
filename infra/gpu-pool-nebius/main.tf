@@ -7,8 +7,9 @@ terraform {
     # Not on registry.opentofu.org: the full address makes OpenTofu fetch it from
     # the Terraform registry.
     nebius = {
-      source  = "registry.terraform.io/nebius/nebius"
-      version = ">= 0.6.8"
+      source = "registry.terraform.io/nebius/nebius"
+      # 0.x: a minor release may break the schema, so stay on 0.6 (checked with 0.6.85)
+      version = "~> 0.6.8"
     }
   }
 }

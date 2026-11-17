@@ -1,0 +1,23 @@
+# Managed by Ansible (role k8s_addons).
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: kueue-controller-manager
+  namespace: kueue-system
+spec:
+  # Recreate: a rolling restart needs room for a second manager, and a small k8s
+  # pool with vLLM on it has none, so the surge pod stays Pending until the timeout.
+  strategy:
+    type: Recreate
+  template:
+    metadata:
+      annotations:
+        # A changed manager-config.yaml changes this, which rolls the manager.
+        attestland/manager-config-sha256: "{{ lookup('file', playbook_dir + '/../sched/k8s/kueue/manager-config.yaml') | hash('sha256') }}"
+    spec:
+      # On the control node: pool-move may drain the last k8s-pool node, and only a
+      # running manager removes the kueue.x-k8s.io/managed finalizer from the pods there.
+      nodeSelector:
+        node-role.kubernetes.io/control-plane: ""
+      tolerations:
+        - {key: node-role.kubernetes.io/control-plane, operator: Exists, effect: NoSchedule}

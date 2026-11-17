@@ -16,6 +16,7 @@
     dest: /etc/slurm/slurmdbd.conf
     owner: "{{ slurm_user }}"
     mode: "0600"
+  register: slurmdbd_conf
 
 - name: slurmrestd override directory
   ansible.builtin.file:
@@ -23,6 +24,8 @@
     state: directory
     mode: "0755"
 
+# On the private address only: healthd (a pod on this node) is its one client,
+# and every node and pod in the VPC could reach 0.0.0.0 (SEC-3).
 - name: slurmrestd unit override (JWT, port 6820)
   ansible.builtin.copy:
     dest: /etc/systemd/system/slurmrestd.service.d/override.conf
@@ -32,16 +35,27 @@
       Group=nogroup
       Environment=SLURM_JWT=daemon
       ExecStart=
-      ExecStart=/usr/sbin/slurmrestd -a rest_auth/jwt 0.0.0.0:6820
+      ExecStart=/usr/sbin/slurmrestd -a rest_auth/jwt {{ private_ip }}:6820
     mode: "0644"
+  register: slurmrestd_unit
 
+# Restarted only when their configuration or binaries changed: a restart of
+# slurmctld during `make configure` is a restart under running jobs (OPS-1).
 - name: Controller daemons
   ansible.builtin.systemd:
-    name: "{{ item }}"
+    name: "{{ item.name }}"
     enabled: true
-    state: restarted
+    state: "{{ 'restarted' if item.changed else 'started' }}"
     daemon_reload: true
-  loop: [slurmdbd, slurmctld, slurmrestd]
+  loop:
+    - {name: slurmdbd, changed: "{{ slurmdbd_conf.changed or (slurm_build_changed | default(false)) }}"}
+    - name: slurmctld
+      changed: "{{ (slurm_conf.changed | default(false)) or (slurm_jwt.changed | default(false)) or (munge_key.changed | default(false))
+                   or (slurm_build_changed | default(false)) }}"
+    - name: slurmrestd
+      changed: "{{ slurmrestd_unit.changed or (slurm_jwt.changed | default(false)) or (slurm_build_changed | default(false)) }}"
+  loop_control:
+    label: "{{ item.name }}"
 
 - name: Register cluster in accounting
   ansible.builtin.shell: sacctmgr -i add cluster {{ cluster_name }} || true

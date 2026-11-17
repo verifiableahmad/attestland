@@ -1,7 +1,9 @@
+# cuda-toolkit-<major>-<minor> alone resolves to the newest patch release; the
+# version pin makes it the one in versions.env (D-6).
 - name: CUDA toolkit, NCCL and MPI
   ansible.builtin.apt:
     name:
-      - "cuda-toolkit-{{ cuda_version.split('.')[0] }}-{{ cuda_version.split('.')[1] }}"
+      - "cuda-toolkit-{{ cuda_version.split('.')[0] }}-{{ cuda_version.split('.')[1] }}={{ cuda_version }}-1"
       - "libnccl2={{ nccl_version }}"
       - "libnccl-dev={{ nccl_version }}"
       - libopenmpi-dev
@@ -15,9 +17,17 @@
     repo: https://github.com/NVIDIA/nccl-tests.git
     dest: /opt/nccl-tests
     version: "{{ nccl_tests_ref }}"
+    force: true
 
+# The stamp names what the binaries were built from, so bumping NCCL_TESTS_REF,
+# NCCL_VERSION or CUDA_VERSION rebuilds them (I-6).
 - name: Build nccl-tests with MPI (multi-node via srun --mpi=pmix)
-  ansible.builtin.command:
-    cmd: make -j MPI=1 MPI_HOME=/usr/lib/x86_64-linux-gnu/openmpi CUDA_HOME=/usr/local/cuda
+  ansible.builtin.shell: |
+    set -e
+    rm -f /opt/nccl-tests/build/.built-*
+    make clean
+    make -j MPI=1 MPI_HOME=/usr/lib/x86_64-linux-gnu/openmpi CUDA_HOME=/usr/local/cuda
+    touch /opt/nccl-tests/build/.built-{{ nccl_tests_ref }}-{{ nccl_version | replace('+', '_') }}-cuda{{ cuda_version }}
+  args:
     chdir: /opt/nccl-tests
-    creates: /opt/nccl-tests/build/all_reduce_perf
+    creates: /opt/nccl-tests/build/.built-{{ nccl_tests_ref }}-{{ nccl_version | replace('+', '_') }}-cuda{{ cuda_version }}

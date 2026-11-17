@@ -1,8 +1,11 @@
 # Attestland - the only entry points.
 #
+#   make durable-up              S3 buckets and the OpenTofu state bucket (AWS, once; outlives every pool)
 #   make up POOL=gpu|cc          create a pool (OpenTofu) and configure it (Ansible);
 #                                POOL=gpu CLOUD=nebius: the GPU pool on Nebius (ADR 013)
-#   make down POOL=gpu|cc        destroy it; ends every working session
+#   make sync                    copy this working tree to the control node (after a local edit)
+#   make results-pull            result files and job logs from the control node to bench/results
+#   make down POOL=gpu|cc        pull the results, then destroy the pool; ends every working session
 #   make control-ssh             shell in /opt/al/repo on the control node; run data, nccl, train*, serve-bench there
 #   make reaper-up               reaper's AWS role, Azure app and repo variables (once)
 #   make lab-host-up / -down     AWS bare-metal Linux/KVM host for lab-up and provision
@@ -27,11 +30,18 @@ ANSIBLE ?= ansible-playbook
 INVENTORY ?= ansible/inventory/$(POOL)$(if $(filter nebius,$(CLOUD)),-nebius).ini
 BIN := $(CURDIR)/bin
 export ANSIBLE_CONFIG := $(CURDIR)/ansible/ansible.cfg
+# On the laptop: the IAM user al-operator (runbook, prerequisites), never the
+# account root user. Not on the cluster (role common writes /etc/fleet/node.env),
+# where `make chaos` and `make goodput` use the node's instance role.
+ifeq ($(wildcard /etc/fleet/node.env),)
+AWS_PROFILE ?= attestland
+endif
 
-.PHONY: help up down infra-up infra-down configure control-ssh reaper-up reaper-down \
+.PHONY: help up down infra-up infra-down configure sync results-pull control-ssh durable-up state-migrate \
+        reaper-up reaper-down \
         lab-host-up lab-host-sync lab-host-ssh lab-host-down \
         lab-image lab-up lab-test lab-down lab-rail-up provision provision-down \
-        pool-move chaos burnin data nccl train train-sweep serve-bench ckpt-bench ckpt-interval \
+        pool-move chaos burnin data nccl nccl-smoke train train-sweep serve-bench serve-diag ckpt-bench ckpt-interval \
         goodput receipts alverify cc-overhead healthd test test-go test-py lint plots
 
 help:
@@ -40,9 +50,36 @@ help:
 # --- Infrastructure ---------------------------------------------------------
 up: infra-up configure
 
+# Durable tier (infra/durable, D-2): the buckets and the OpenTofu state bucket,
+# in their own state, so `make down` never touches them.
+# Interactive on purpose: review the plan (imports, no destroys) and type yes.
+durable-up:
+	$(TOFU) -chdir=infra/durable init -input=false
+	$(TOFU) -chdir=infra/durable apply
+
+# The AWS GPU pool keeps its state in the durable tier's bucket (OPS-2).
+AWS_GPU := $(and $(filter gpu,$(POOL)),$(filter aws,$(CLOUD)))
+BACKEND_CONFIG = $(if $(AWS_GPU),-backend-config=bucket=$$($(TOFU) -chdir=infra/durable output -raw state_bucket) \
+                 -backend-config=region=$$($(TOFU) -chdir=infra/durable output -raw region))
+
+# Once, to move a local terraform.tfstate of infra/gpu-pool into the state bucket.
+state-migrate:
+	$(TOFU) -chdir=infra/gpu-pool init -input=false -migrate-state -force-copy $(BACKEND_CONFIG)
+
+# The plan is applied only if it replaces no VM (scripts/plan-guard.py); a
+# replaced control node takes the results on it. ALLOW_REPLACE=1 to go ahead.
 infra-up:
-	$(TOFU) -chdir=$(POOL_DIR) init -input=false
-	$(TOFU) -chdir=$(POOL_DIR) apply -input=false -auto-approve
+ifneq ($(AWS_GPU),)
+	@$(TOFU) -chdir=infra/durable output -raw state_bucket >/dev/null 2>&1 || { \
+	  echo "no durable tier yet: run make durable-up first (runbook, Phase 2 step 3)" >&2; exit 1; }
+	@[ ! -s infra/gpu-pool/terraform.tfstate ] || grep -qs '"type": *"s3"' infra/gpu-pool/.terraform/terraform.tfstate || { \
+	  echo "infra/gpu-pool still has a local state: run make state-migrate first (runbook, Phase 2 step 3)" >&2; exit 1; }
+endif
+	$(TOFU) -chdir=$(POOL_DIR) init -input=false $(BACKEND_CONFIG)
+	$(if $(AWS_GPU),./scripts/aws-quota.sh $(POOL_DIR))
+	$(TOFU) -chdir=$(POOL_DIR) plan -input=false -out=tfplan
+	$(TOFU) -chdir=$(POOL_DIR) show -json tfplan | $(PY) scripts/plan-guard.py
+	$(TOFU) -chdir=$(POOL_DIR) apply -input=false tfplan
 	$(TOFU) -chdir=$(POOL_DIR) output -raw ansible_inventory > $(INVENTORY)
 
 configure:
@@ -50,16 +87,35 @@ configure:
 	ansible-galaxy collection install -r ansible/requirements.yml >/dev/null
 	$(ANSIBLE) -i $(INVENTORY) ansible/site-$(POOL).yml
 
+# Code edits only: the working tree and the venv, no restarts and no pool
+# changes (`make configure` re-runs every role).
+sync:
+	$(ANSIBLE) -i $(INVENTORY) ansible/sync.yml
+
+# Result files and job logs live on the control node until pulled. `make down`
+# pulls first and destroys nothing if that fails; FORCE=1 destroys anyway.
+CONTROL_HOST = $$(sed -n 's/^al-control ansible_host=\([^ ]*\).*/\1/p' $(INVENTORY))
+CONTROL_SSH = ssh -i $$(sed -n 's/^ansible_ssh_private_key_file=//p' $(INVENTORY)) -o StrictHostKeyChecking=accept-new
+
+results-pull:
+	rsync -az -e "$(CONTROL_SSH)" al@$(CONTROL_HOST):/opt/al/results/ bench/results/
+	rsync -az -e "$(CONTROL_SSH)" al@$(CONTROL_HOST):/scratch/logs/ bench/results/logs/$(CLOUD)/
+	@echo "results in bench/results (job logs: bench/results/logs/$(CLOUD), not committed)"
+
 down:
+ifeq ($(POOL),gpu)
+	@$(MAKE) --no-print-directory results-pull || [ "$(FORCE)" = 1 ] || { \
+	  echo "results-pull failed, nothing destroyed; FORCE=1 destroys anyway and loses what is on al-control" >&2; exit 1; }
+endif
+	$(TOFU) -chdir=$(POOL_DIR) init -input=false $(BACKEND_CONFIG) >/dev/null
 	$(TOFU) -chdir=$(POOL_DIR) destroy -input=false -auto-approve
 	rm -f $(INVENTORY)
 
 # The control node is the login node: `make configure` copies this working tree
-# to /opt/al/repo there and shares it and /scratch/logs with the GPU nodes.
+# to /opt/al/repo there and shares it, /opt/al/results, /scratch/logs and
+# /scratch/runs with the GPU nodes.
 control-ssh:
-	ssh -t -i $$(sed -n 's/^ansible_ssh_private_key_file=//p' $(INVENTORY)) \
-	  al@$$(sed -n 's/^al-control ansible_host=\([^ ]*\).*/\1/p' $(INVENTORY)) \
-	  'cd /opt/al/repo && exec bash -l'
+	$(CONTROL_SSH) -t al@$(CONTROL_HOST) 'cd /opt/al/repo && exec bash -l'
 
 # Reaper identities (infra/reaper): the github provider reads GITHUB_TOKEN.
 reaper-up:
@@ -144,6 +200,10 @@ data:
 nccl:
 	./bench/nccl/run-all.sh
 
+# Before the 36-job sweep: 2 nodes, 64 MB, both ranks joined over NET/Socket (NCCL-6).
+nccl-smoke:
+	SMOKE=1 ./bench/nccl/run-all.sh
+
 train:
 	sbatch workloads/train/train.sbatch
 
@@ -152,6 +212,10 @@ train-sweep:
 
 serve-bench:
 	$(PY) workloads/serve/sweep.py --config workloads/serve/sweep.yaml
+
+# Why vLLM's weight fetch fails (I-16): checks, plus one short-lived pod.
+serve-diag:
+	./sched/k8s/vllm/diag.sh
 
 # --- Layer 5: storage -------------------------------------------------------
 ckpt-bench:

@@ -1,4 +1,4 @@
-# Cost control: hourly, delete project GPU instances older than 8 hours unless keep=true.
+# Cost control: hourly, delete project instances older than 8 hours (control nodes: 24) unless keep=true.
 name: reaper
 on:
   schedule:

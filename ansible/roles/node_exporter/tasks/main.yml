@@ -1,6 +1,19 @@
+- name: Download directory
+  ansible.builtin.file:
+    path: /opt/al/dl
+    state: directory
+    mode: "0755"
+
+- name: node_exporter release (checksum in versions.env)
+  ansible.builtin.get_url:
+    url: "https://github.com/prometheus/node_exporter/releases/download/v{{ node_exporter_version }}/node_exporter-{{ node_exporter_version }}.linux-amd64.tar.gz"
+    dest: "/opt/al/dl/node_exporter-{{ node_exporter_version }}.linux-amd64.tar.gz"
+    checksum: "sha256:{{ node_exporter_sha256 }}"
+    mode: "0644"
+
 - name: node_exporter binary
   ansible.builtin.unarchive:
-    src: "https://github.com/prometheus/node_exporter/releases/download/v{{ node_exporter_version }}/node_exporter-{{ node_exporter_version }}.linux-amd64.tar.gz"
+    src: "/opt/al/dl/node_exporter-{{ node_exporter_version }}.linux-amd64.tar.gz"
     dest: /opt/al
     remote_src: true
     creates: "/opt/al/node_exporter-{{ node_exporter_version }}.linux-amd64/node_exporter"

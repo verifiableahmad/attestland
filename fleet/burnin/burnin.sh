@@ -4,7 +4,8 @@
 #
 #   burnin.sh --peer <known-good peer IP> --sku g6.2xlarge --report /var/lib/fleet/burnin-report.json
 #
-# The inter-node checks need root SSH to the peer (ansible sets up the burn-in key).
+# The inter-node checks need root SSH to the peer: the role cluster_ssh installs
+# the burn-in key. make burnin (ansible/burnin.yml) holds the peer idle meanwhile.
 set -uo pipefail
 HERE=$(cd "$(dirname "$0")" && pwd)
 PEER="" SKU="" REPORT=/var/lib/fleet/burnin-report.json MTU=${MTU:-9001}
@@ -23,6 +24,7 @@ done
 RAW=$(mktemp -d /var/lib/fleet/burnin-raw.XXXX)
 NODE=$(hostname -s)
 NGPUS=$(nvidia-smi -L | wc -l)
+GPU_MODEL=$(nvidia-smi --query-gpu=name --format=csv,noheader | head -1)
 IFACE=$(ip -o -4 route show to default | awk '{print $5}' | head -1)
 log() { printf '%s burnin %s: %s\n' "$(date -u +%H:%M:%S)" "$NODE" "$*"; }
 t0=$(date +%s)
@@ -74,7 +76,7 @@ ctk=$(nvidia-ctk --version 2>/dev/null | grep -o '[0-9]*\.[0-9]*\.[0-9]*' | head
 drv=$(nvidia-smi --query-gpu=driver_version --format=csv,noheader | head -1)
 printf '{"driver":"%s","cuda":"%s","nccl":"%s","container_toolkit":"%s"}\n' "$drv" "$cuda" "$nccl" "$ctk" > "$RAW/software.json"
 
-python3 "$HERE/evaluate.py" --raw "$RAW" --sku "$SKU" --node "$NODE" --ngpus "$NGPUS" --mtu "$MTU" \
+python3 "$HERE/evaluate.py" --raw "$RAW" --sku "$SKU" --gpu-model "$GPU_MODEL" --node "$NODE" --ngpus "$NGPUS" --mtu "$MTU" \
   ${FLEET_MEDIAN:+--fleet-median-busbw "$FLEET_MEDIAN"} --report "$REPORT" \
   --textfile /var/lib/node_exporter/textfile/burnin.prom
 rc=$?

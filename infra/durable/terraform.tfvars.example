@@ -1,0 +1,4 @@
+region = "us-east-1"
+# Buckets infra/gpu-pool created before the durable tier had its own module.
+# On 2026-11-16 the GPU pool's destroy left only datasets (with the corpus):
+import_buckets = ["datasets"]

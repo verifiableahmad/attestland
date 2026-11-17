@@ -34,8 +34,8 @@ spec:
         kueue.x-k8s.io/podset-unconstrained-topology: "true"   # single pod: no placement constraint (ADR 007)
     spec:
       priorityClassName: serving
-      tolerations:
-        - {key: fleet.attestland/pool, operator: Equal, value: k8s, effect: NoSchedule}
+      # Slurm-pool nodes carry fleet.attestland/pool=slurm:NoSchedule (pool-move),
+      # which this pod deliberately does not tolerate.
       nodeSelector:
         fleet.attestland/pool: k8s
       initContainers:
@@ -47,8 +47,23 @@ spec:
             - secretRef: {name: s3-credentials, optional: true}   # Nebius only (ADR 013)
           command: ["sh", "-c"]
           # Credentials on AWS: the node's instance role through IMDS (hop limit 2, infra/gpu-pool).
+          # On failure it prints what it was given and whether DNS, the
+          # endpoint and IMDS answer, so the pod's log says why (I-16;
+          # `make serve-diag` on the control node runs the same checks).
           args:
-            - aws s3 sync --delete "s3://${S3_BUCKET_PREFIX:+$S3_BUCKET_PREFIX-}$MODEL_PREFIX" /models/current
+            - |
+              src="s3://${S3_BUCKET_PREFIX:+$S3_BUCKET_PREFIX-}$MODEL_PREFIX"
+              aws s3 sync --delete "$src" /models/current && exit 0
+              rc=$?
+              echo "fetch-weights: sync of $src failed (rc $rc)"
+              echo "  AWS_REGION=${AWS_REGION:-unset} S3_BUCKET_PREFIX=${S3_BUCKET_PREFIX:-unset} AWS_ENDPOINT_URL=${AWS_ENDPOINT_URL:-unset}"
+              host=${S3_BUCKET_PREFIX:+$S3_BUCKET_PREFIX-}${MODEL_PREFIX%%/*}.s3.${AWS_REGION:-us-east-1}.amazonaws.com
+              if addr=$(getent hosts "$host"); then echo "  dns: $addr"; else echo "  dns: $host does not resolve (CoreDNS or the pod network)"; fi
+              curl -sS -o /dev/null -m 5 -w '  https: HTTP %{http_code}\n' "https://$host/" 2>&1 | sed 's/^curl/  https: curl/'
+              curl -sS -o /dev/null -m 3 -X PUT -H 'X-aws-ec2-metadata-token-ttl-seconds: 60' \
+                -w '  imds: HTTP %{http_code}\n' http://169.254.169.254/latest/api/token 2>&1 || echo "  imds: no answer (hop limit, or not on AWS)"
+              aws sts get-caller-identity --output text 2>&1 | sed 's/^/  identity: /'
+              exit $rc
           volumeMounts:
             - {name: models, mountPath: /models}
       containers:

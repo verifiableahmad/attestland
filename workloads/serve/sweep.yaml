@@ -1,6 +1,7 @@
 # Serving sweep (spec 4.2). SLO is fixed here, before any test runs.
 name: al-gpt-124m
-base_url: http://al-gpu-04:30800          # vLLM NodePort on a k8s-pool node
+# vLLM's NodePort on the node in the k8s pool; {k8s_node} is looked up when the sweep starts.
+base_url: http://{k8s_node}:30800
 model: al-gpt                             # --served-model-name
 tokenizer: openai-community/gpt2
 bench_image: vllm/vllm-openai:v0.11.0     # client runs on the control VM via podman

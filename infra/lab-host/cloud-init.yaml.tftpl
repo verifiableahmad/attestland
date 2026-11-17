@@ -38,9 +38,12 @@ runcmd:
   # Groups exist only once the packages are in, so not in users: above.
   - usermod -aG docker,libvirt,kvm ${ssh_user}
   - systemctl enable --now docker libvirtd
-  - bash -c "$(curl -sL https://get.containerlab.dev)" -- -v ${containerlab}
+  # The pinned release by checksum (versions.env), not the get.containerlab.dev script.
+  - curl -fsSL -o /tmp/clab.deb https://github.com/srl-labs/containerlab/releases/download/v${containerlab}/containerlab_${containerlab}_linux_amd64.deb
+  - echo "${containerlab_sha256}  /tmp/clab.deb" | sha256sum -c - && apt-get install -y /tmp/clab.deb
   - curl -fsSL -o /usr/local/bin/k3d https://github.com/k3d-io/k3d/releases/download/${k3d}/k3d-linux-amd64
   - curl -fsSL -o /usr/local/bin/kubectl https://dl.k8s.io/release/v${kubectl}/bin/linux/amd64/kubectl
-  - curl -fsSL https://get.helm.sh/helm-${helm}-linux-amd64.tar.gz | tar -xz -C /usr/local/bin --strip-components=1 linux-amd64/helm
+  - curl -fsSL -o /tmp/helm.tgz https://get.helm.sh/helm-${helm}-linux-amd64.tar.gz
+  - echo "${helm_sha256}  /tmp/helm.tgz" | sha256sum -c - && tar -xzf /tmp/helm.tgz -C /usr/local/bin --strip-components=1 linux-amd64/helm
   - chmod +x /usr/local/bin/k3d /usr/local/bin/kubectl
   - test -e /dev/kvm && touch /var/lib/al-lab-ready

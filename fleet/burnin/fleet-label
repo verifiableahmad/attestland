@@ -7,17 +7,22 @@
 set -euo pipefail
 node=${1:?node} verdict=${2:?passed|failed} report=${3:?report.json}
 sha=$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1]))["sha256"])' "$report")
-pool=$(kubectl get node "$node" -o jsonpath='{.metadata.labels.fleet\.attested/pool}' 2>/dev/null || echo slurm)
+# The k8s label is the source of truth (pool-move sets it), the Slurm feature
+# pool_<pool> the fallback. Neither: leave the node out of both schedulers.
+pool=$(kubectl get node "$node" -o jsonpath='{.metadata.labels.fleet\.attestland/pool}' 2>/dev/null || true)
+[[ -n $pool ]] || pool=$(scontrol show node "$node" -o 2>/dev/null | grep -o 'ActiveFeatures=[^ ]*' |
+  grep -o 'pool_[a-z0-9]*' | head -1 | cut -d_ -f2 || true)
 
 if [[ $verdict == passed ]]; then
   kubectl label node "$node" fleet.attestland/burnin=passed fleet.attestland/state=Ready --overwrite
   kubectl annotate node "$node" fleet.attestland/burnin-report-sha256="$sha" --overwrite
   kubectl taint node "$node" fleet.attestland/unhealthy- 2>/dev/null || true
-  if [[ $pool == k8s ]]; then
-    kubectl uncordon "$node"
-  else
-    scontrol update nodename="$node" state=resume 2>/dev/null || true
-  fi
+  case $pool in
+    k8s)   kubectl uncordon "$node" ;;
+    slurm) scontrol update nodename="$node" state=resume 2>/dev/null || true ;;
+    *)     echo "$node: burn-in passed ($sha) but it has no pool; left out of both. Move it: pool-move $node <k8s|slurm>" >&2
+           exit 2 ;;
+  esac
   echo "$node: burn-in passed ($sha), Ready in pool $pool"
 else
   kubectl label node "$node" fleet.attestland/burnin=failed fleet.attestland/state=Repair --overwrite

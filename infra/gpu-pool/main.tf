@@ -1,12 +1,19 @@
 # GPU pool (phases 2-4, ADR 010): 4 x g6.2xlarge (1x L4), a control VM (Slurm + k8s
-# control plane + monitoring); the durable tier is S3 buckets (storage.tf).
+# control plane + monitoring); the durable tier is S3 buckets (infra/durable, storage.tf).
 terraform {
-  required_version = ">= 1.8"
+  required_version = ">= 1.10"
   required_providers {
     aws = {
       source  = "hashicorp/aws"
       version = "~> 6.0"
     }
+  }
+  # State in the durable tier's bucket (OPS-2): locked, versioned, not tied to one
+  # laptop. The Makefile passes bucket and region from infra/durable's outputs;
+  # `make state-migrate` moves an existing local state there once.
+  backend "s3" {
+    key          = "gpu-pool/terraform.tfstate"
+    use_lockfile = true
   }
 }
 
@@ -24,13 +31,18 @@ provider "aws" {
 
 data "aws_caller_identity" "current" {}
 
-# Ubuntu 22.04 (ADR 009).
+# Ubuntu 22.04 (ADR 009), the exact build pinned in versions.env (AWS_AMI_NAME):
+# a newer Canonical build would otherwise replace every VM on the next apply and
+# change the kernel the driver is built against (D-3).
+locals {
+  versions = { for l in regexall("(?m)^([A-Z0-9_]+)=([^\\s#]+)", file("${path.module}/../../versions.env")) : l[0] => l[1] }
+}
+
 data "aws_ami" "ubuntu" {
-  most_recent = true
-  owners      = ["099720109477"] # Canonical
+  owners = ["099720109477"] # Canonical
   filter {
     name   = "name"
-    values = ["ubuntu/images/hvm-ssd/ubuntu-jammy-22.04-amd64-server-*"]
+    values = [local.versions.AWS_AMI_NAME]
   }
 }
 
@@ -48,6 +60,9 @@ locals {
   EOT
   subnet_cidrs = { for i, az in var.azs : az => cidrsubnet(var.vpc_cidr, 8, i) }
   subnet_cidr  = local.subnet_cidrs[var.az]
+  # The control node has its own zone (I-1): moving the GPU nodes to escape
+  # InsufficientInstanceCapacity must not replace al-control and its results.
+  control_az = coalesce(var.control_az, var.az)
 }
 
 resource "aws_vpc" "al" {
@@ -118,10 +133,10 @@ resource "aws_vpc_security_group_egress_rule" "all" {
 resource "aws_instance" "control" {
   ami                    = data.aws_ami.ubuntu.id
   instance_type          = var.control_instance_type
-  subnet_id              = aws_subnet.al[var.az].id
-  private_ip             = cidrhost(local.subnet_cidr, 10)
+  subnet_id              = aws_subnet.al[local.control_az].id
+  private_ip             = cidrhost(local.subnet_cidrs[local.control_az], 10)
   vpc_security_group_ids = [aws_security_group.al.id]
-  iam_instance_profile   = aws_iam_instance_profile.nodes.name
+  iam_instance_profile   = aws_iam_instance_profile.control.name
   user_data              = local.user_data
   root_block_device {
     volume_size = 100
@@ -131,6 +146,7 @@ resource "aws_instance" "control" {
     http_tokens                 = "required"
     http_put_response_hop_limit = 2
   }
+  # role=control: the reaper gives it longer than the GPU nodes (infra/reaper).
   tags = { Name = "al-control", role = "control" }
 }
 
@@ -155,7 +171,7 @@ resource "aws_instance" "gpu" {
   subnet_id              = aws_subnet.al[var.az].id
   private_ip             = cidrhost(local.subnet_cidr, 100 + count.index + 1)
   vpc_security_group_ids = [aws_security_group.al.id]
-  iam_instance_profile   = aws_iam_instance_profile.nodes.name
+  iam_instance_profile   = aws_iam_instance_profile.gpu.name
   placement_group        = local.cluster ? aws_placement_group.gpu[0].id : null
   user_data              = local.user_data
   root_block_device {
@@ -181,24 +197,39 @@ resource "aws_instance" "gpu" {
   tags = { Name = format("al-gpu-%02d", count.index + 1), role = "gpu" }
 }
 
-# Node role: the durable buckets (storage.tf), and chaos "node loss" stopping
-# and starting pool VMs from the control VM; topology lookups for ADR 007.
-resource "aws_iam_role" "nodes" {
-  name = "al-nodes"
-  assume_role_policy = jsonencode({
+# Instance roles (SEC-2). Every pod on a node can use its role through IMDS, so
+# the GPU nodes get only the buckets jobs need (storage.tf). The control node
+# also stops and starts pool VMs (chaos "node loss") and looks up topology (ADR 007).
+locals {
+  ec2_trust = jsonencode({
     Version   = "2012-10-17"
     Statement = [{ Effect = "Allow", Principal = { Service = "ec2.amazonaws.com" }, Action = "sts:AssumeRole" }]
   })
 }
 
-resource "aws_iam_instance_profile" "nodes" {
-  name = "al-nodes"
-  role = aws_iam_role.nodes.name
+resource "aws_iam_role" "control" {
+  name               = "al-control"
+  assume_role_policy = local.ec2_trust
+}
+
+resource "aws_iam_instance_profile" "control" {
+  name = "al-control"
+  role = aws_iam_role.control.name
+}
+
+resource "aws_iam_role" "gpu" {
+  name               = "al-gpu"
+  assume_role_policy = local.ec2_trust
+}
+
+resource "aws_iam_instance_profile" "gpu" {
+  name = "al-gpu"
+  role = aws_iam_role.gpu.name
 }
 
 resource "aws_iam_role_policy" "chaos" {
   name = "chaos-and-topology"
-  role = aws_iam_role.nodes.id
+  role = aws_iam_role.control.id
   policy = jsonencode({
     Version = "2012-10-17"
     Statement = [

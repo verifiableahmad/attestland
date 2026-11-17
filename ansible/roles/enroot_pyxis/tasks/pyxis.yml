@@ -1,0 +1,22 @@
+# Pyxis, the SPANK plugin behind srun --container-image. On the GPU nodes it
+# runs the containers; on the control node it only lets sbatch and srun accept
+# the options (plugstack.conf). Built against the installed Slurm headers.
+- name: Pyxis source
+  ansible.builtin.git:
+    repo: https://github.com/NVIDIA/pyxis.git
+    dest: /usr/src/pyxis
+    version: "v{{ pyxis_version }}"
+    force: true
+
+# A Pyxis built against another Slurm fails every job now that plugstack.conf
+# requires it: the stamp rebuilds it when either version changes (I-6).
+- name: Build and install Pyxis
+  ansible.builtin.shell: |
+    set -e
+    rm -f /usr/local/lib/slurm/.pyxis-*
+    make -C /usr/src/pyxis clean
+    make -C /usr/src/pyxis
+    make -C /usr/src/pyxis install prefix=/usr/local
+    touch /usr/local/lib/slurm/.pyxis-{{ pyxis_version }}-slurm-{{ slurm_version }}
+  args:
+    creates: /usr/local/lib/slurm/.pyxis-{{ pyxis_version }}-slurm-{{ slurm_version }}

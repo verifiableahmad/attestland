@@ -32,3 +32,9 @@ def test_bench_command_carries_fixed_distribution():
     cmd = bench_cmd(cfg, 8, 400, Path("/tmp/a/r.json"))
     s = " ".join(cmd)
     assert "--request-rate 8" in s and "--random-input-len 512" in s and "--seed 42" in s
+
+
+def test_base_url_names_the_k8s_pool_node():
+    from sweep import resolve_base_url
+    assert resolve_base_url("http://{k8s_node}:30800", lambda: "al-gpu-02") == "http://al-gpu-02:30800"
+    assert resolve_base_url("http://localhost:8000", lambda: 1 / 0) == "http://localhost:8000"

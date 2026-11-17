@@ -12,10 +12,20 @@ variable "azs" {
 variable "az" {
   type        = string
   default     = "us-east-1a"
-  description = "Zone for every pool VM (NCCL across zones is slower and billed). Change it when a zone has no g6 capacity."
+  description = "Zone for the GPU nodes (NCCL across zones is slower and billed). Change it when a zone has no g6 capacity."
   validation {
     condition     = contains(var.azs, var.az)
     error_message = "az must be one of azs."
+  }
+}
+
+variable "control_az" {
+  type        = string
+  default     = null
+  description = "Zone for al-control; null = az. Set it to the current zone before changing az, or the move replaces al-control and the results on it."
+  validation {
+    condition     = var.control_az == null || contains(var.azs, coalesce(var.control_az, "none"))
+    error_message = "control_az must be one of azs."
   }
 }
 
@@ -96,11 +106,5 @@ variable "budget_contact_emails" {
 variable "bucket_prefix" {
   type        = string
   default     = ""
-  description = "S3 bucket names are global; buckets are <prefix>-<name>. Empty: attestland-<account id>."
-}
-
-variable "bucket_force_destroy" {
-  type        = bool
-  default     = false
-  description = "Let tofu destroy delete buckets that still hold objects (checkpoints, datasets, models, receipts)."
+  description = "The durable tier's bucket prefix (infra/durable, same value). Empty: attestland-<account id>."
 }

@@ -1,5 +1,11 @@
-# Fast tier: local NVMe mounted at /scratch (EC2 instance store; g6.2xlarge has one 450 GB disk).
-# Without one (the Nebius L40S presets) /scratch stays a directory on the boot disk.
+# Fast tier: local NVMe mounted at /scratch (EC2 instance store; g6.2xlarge has
+# one 450 GB disk, g6.xlarge 250 GB). Without one (the Nebius L40S presets)
+# /scratch stays a directory on the boot disk.
+#
+# The instance store comes back blank after a stop/start (spot interruption,
+# chaos node-loss), under another kernel name. So fstab names the filesystem by
+# label, and al-scratch-format.service makes it at boot when the disk is blank;
+# al-scratch-layout.service recreates the directories jobs expect (D-9).
 - name: Find local NVMe SSDs
   ansible.builtin.shell: |
     for d in /dev/disk/by-id/nvme-Amazon_EC2_NVMe_Instance_Storage_*; do
@@ -10,25 +16,46 @@
   register: ssds
   changed_when: false
 
-- name: Make filesystem
-  community.general.filesystem:
-    dev: "{{ ssds.stdout_lines | first }}"
-    fstype: ext4
-    opts: -E nodiscard -m 0
+- name: Boot scripts and units
+  ansible.builtin.template:
+    src: "{{ item.src }}"
+    dest: "{{ item.dest }}"
+    mode: "{{ item.mode }}"
+  loop:
+    - {src: al-scratch-format.sh.j2, dest: /opt/al/bin/al-scratch-format, mode: "0755"}
+    - {src: al-scratch-layout.sh.j2, dest: /opt/al/bin/al-scratch-layout, mode: "0755"}
+    - {src: al-scratch-format.service.j2, dest: /etc/systemd/system/al-scratch-format.service, mode: "0644"}
+    - {src: al-scratch-layout.service.j2, dest: /etc/systemd/system/al-scratch-layout.service, mode: "0644"}
+  loop_control:
+    label: "{{ item.dest }}"
+
+- name: Format at boot (instance store only)
+  ansible.builtin.systemd:
+    name: al-scratch-format.service
+    enabled: "{{ ssds.stdout_lines | length > 0 }}"
+    daemon_reload: true
+
+- name: Layout at boot
+  ansible.builtin.systemd:
+    name: al-scratch-layout.service
+    enabled: true
+    daemon_reload: true
+
+- name: Filesystem on the instance store, labelled al-scratch
+  ansible.builtin.command: /opt/al/bin/al-scratch-format
+  register: al_scratch_fmt
+  changed_when: "'made' in al_scratch_fmt.stdout or 'labelled' in al_scratch_fmt.stdout"
   when: ssds.stdout_lines | length > 0
 
-- name: Mount /scratch
+- name: Mount /scratch by label
   ansible.posix.mount:
     path: "{{ scratch_mount }}"
-    src: "{{ ssds.stdout_lines | first }}"
+    src: LABEL=al-scratch
     fstype: ext4
-    opts: defaults,noatime,nofail,discard
+    opts: defaults,noatime,nofail,discard,x-systemd.device-timeout=120,x-systemd.requires=al-scratch-format.service
     state: mounted
   when: ssds.stdout_lines | length > 0
 
 - name: Scratch layout
-  ansible.builtin.file:
-    path: "{{ scratch_mount }}/{{ item }}"
-    state: directory
-    mode: "1777"
-  loop: [ckpt, enroot, logs, data]
+  ansible.builtin.command: /opt/al/bin/al-scratch-layout
+  changed_when: false

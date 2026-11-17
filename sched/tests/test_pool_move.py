@@ -13,7 +13,8 @@ case "$(basename "$0") $*" in
   "squeue"*) n=$(cat "$STUB_DIR/jobs" 2>/dev/null || echo 0); [ "$n" -gt 0 ] && { echo 1; echo $((n-1)) > "$STUB_DIR/jobs"; } ; true ;;
   "kubectl get node "*"-o jsonpath={.spec.taints"*) echo "${STUB_TAINTS:-}" ;;
   "kubectl get nodes"*) printf '1\\n1\\n' ;;
-  "kubectl get pods"*) true ;;
+  "kubectl get clusterqueue"*) echo "${STUB_RESOURCES:-cpu memory nvidia.com/gpu}" ;;
+  "kubectl get pods"*) printf '%s' "${STUB_PODS:-}" ;;
 esac
 """
 
@@ -63,3 +64,28 @@ def test_refuses_node_drained_by_healthd(tmp_path):
 def test_rejects_bad_pool(tmp_path):
     p, _ = run(tmp_path, "al-gpu-02", "mars")
     assert p.returncode == 2
+
+
+def test_move_to_slurm_taints_the_node(tmp_path):
+    p, calls = run(tmp_path, "al-gpu-02", "slurm")
+    assert p.returncode == 0, p.stderr
+    assert "kubectl taint node al-gpu-02 fleet.attestland/pool=slurm:NoSchedule --overwrite" in calls
+    p, calls = run(tmp_path, "al-gpu-02", "k8s")
+    assert "kubectl taint node al-gpu-02 fleet.attestland/pool-" in calls
+
+
+def test_quota_index_is_looked_up_by_name(tmp_path):
+    p, calls = run(tmp_path, "al-gpu-01", "k8s", env_extra={"STUB_RESOURCES": "nvidia.com/gpu cpu memory"})
+    assert p.returncode == 0, p.stderr
+    patch = next(c for c in calls if c.startswith("kubectl patch clusterqueue gpu"))
+    assert "/resources/0/nominalQuota" in patch
+
+
+def test_no_wait_refuses_a_busy_node_and_changes_nothing(tmp_path):
+    (tmp_path / "jobs").write_text("1")
+    p, calls = run(tmp_path, "al-gpu-01", "k8s", "--no-wait")
+    assert p.returncode == 5
+    assert not any("state=drain" in c or "label" in c for c in calls)
+    p, calls = run(tmp_path, "al-gpu-02", "slurm", "--no-wait", env_extra={"STUB_PODS": "Job\n"})
+    assert p.returncode == 5
+    assert not any(c.startswith(("kubectl cordon", "kubectl taint", "kubectl drain")) for c in calls)

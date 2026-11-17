@@ -14,4 +14,6 @@
     svc_image: "{{ dcgm_exporter_image }}"
     svc_gpus: true
     svc_volumes: ["/etc/fleet/dcgm-counters.csv:/etc/dcgm-exporter/al-counters.csv:ro"]
-    svc_command: "-f /etc/dcgm-exporter/al-counters.csv -a :9400"
+    # The host's nv-hostengine (role dcgm), not an embedded second engine: one
+    # owner for the GPUs' profiling counters, the one dcgmi diag also talks to (I-8).
+    svc_command: "-r localhost:5555 -f /etc/dcgm-exporter/al-counters.csv -a :9400"

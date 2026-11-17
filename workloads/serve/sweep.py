@@ -47,6 +47,20 @@ def run_one(cfg: dict, rate, n: int) -> dict:
     return {k: raw.get(k) for k in KEYS}
 
 
+def k8s_pool_node() -> str:
+    """The first node labelled fleet.attestland/pool=k8s (pool-move sets it)."""
+    out = subprocess.run(["kubectl", "get", "nodes", "-l", "fleet.attestland/pool=k8s",
+                          "-o", "jsonpath={.items[*].metadata.name}"],
+                         check=True, capture_output=True, text=True).stdout.split()
+    if not out:
+        sys.exit("no node in the k8s pool: sudo /opt/al/bin/pool-move <node> k8s")
+    return sorted(out)[0]
+
+
+def resolve_base_url(url: str, lookup=k8s_pool_node) -> str:
+    return url.replace("{k8s_node}", lookup()) if "{k8s_node}" in url else url
+
+
 def at_slo(per_rate: dict, slo: dict) -> dict | None:
     """Highest rate whose median p99 TTFT and p99 ITL meet the SLO."""
     best = None
@@ -72,6 +86,7 @@ def main() -> None:
     cfg = yaml.safe_load(a.config.read_text())
     if a.base_url:
         cfg["base_url"] = a.base_url
+    cfg["base_url"] = resolve_base_url(cfg["base_url"])
     name = cfg["name"] + (f"-{a.label}" if a.label else "")
     run_one(cfg, "inf", cfg["warmup_prompts"])      # warm-up, discarded
     per_rate: dict = {}

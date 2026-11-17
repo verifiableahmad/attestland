@@ -1,5 +1,6 @@
 region                = "us-east-1"
 az                    = "us-east-1a" # another of var.azs if this zone has no g6 capacity
+# control_az          = "us-east-1a" # set to the old az before changing az, so al-control stays
 admin_cidrs           = ["REPLACE.your.ip.addr/32"]
 spot                  = false        # true needs G spot quota (0 today); false for timed benchmarks
 phase                 = 2

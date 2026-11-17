@@ -1,0 +1,18 @@
+# Managed by Ansible (role scratch).
+[Unit]
+Description=Directory layout of {{ scratch_mount }}
+DefaultDependencies=no
+After=local-fs.target
+RequiresMountsFor={{ scratch_mount }}
+# Before the control node's shares are mounted on top of logs and runs, and
+# before anything schedules work here.
+Before=remote-fs-pre.target slurmd.service kubelet.service
+Wants=remote-fs-pre.target
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+ExecStart=/opt/al/bin/al-scratch-layout
+
+[Install]
+WantedBy=multi-user.target

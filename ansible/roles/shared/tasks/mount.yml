@@ -1,14 +1,20 @@
-# GPU nodes: the control node's working tree and job logs at the same paths.
-# After the scratch role, because the log directory sits on the scratch mount.
+# GPU nodes: the control node's working tree (read-only), results, job logs and
+# run progress at the same paths. After the scratch role: the log and run
+# directories sit on the scratch mount, and systemd orders these mounts after
+# it. x-systemd.automount: mounted on first use, so a node that boots before
+# al-control, or while it reboots, mounts them once it is back instead of giving
+# up for good (OPS-4, D-1).
 - name: NFS client
   ansible.builtin.apt:
     name: nfs-common
 
 - name: Mount the shared directories
   ansible.posix.mount:
-    path: "{{ item }}"
-    src: "{{ control_private_ip }}:{{ item }}"
+    path: "{{ item.path }}"
+    src: "{{ control_private_ip }}:{{ item.path }}"
     fstype: nfs
-    opts: rw,hard,_netdev,nofail
+    opts: "{{ item.mode }},hard,_netdev,nofail,x-systemd.automount"
     state: mounted
   loop: "{{ shared_dirs }}"
+  loop_control:
+    label: "{{ item.path }} ({{ item.mode }})"
