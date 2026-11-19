@@ -1,0 +1,2 @@
+project_id = "project-REPLACE"   # nebius iam project list; the same as infra/gpu-pool-nebius
+tenant_id  = "tenant-REPLACE"    # nebius iam tenant list

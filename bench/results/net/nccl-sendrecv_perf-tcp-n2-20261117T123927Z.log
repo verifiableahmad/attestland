@@ -1,0 +1,141 @@
+# Collective test starting: sendrecv_perf
+# nThread 1 nGpus 1 minBytes 8 maxBytes 8589934592 step: 2(factor) warmup iters: 5 iters: 20 agg iters: 1 validation: 1 graph: 0
+#
+# Using devices
+#  Rank  0 Group  0 Pid 115655 on  al-gpu-01 device  0 [0000:31:00] NVIDIA L4
+#  Rank  1 Group  0 Pid 116857 on  al-gpu-02 device  0 [0000:31:00] NVIDIA L4
+#
+# Reducing maxBytes to 6812641962 due to memory limitation
+al-gpu-01:115655:115655 [0] NCCL INFO NCCL_SOCKET_IFNAME set to enp39s0
+al-gpu-02:116857:116857 [0] NCCL INFO cudaDriverVersion 13000
+al-gpu-01:115655:115655 [0] NCCL INFO cudaDriverVersion 13000
+al-gpu-01:115655:115655 [0] NCCL INFO NCCL version 2.27.7+cuda12.9
+al-gpu-02:116857:116857 [0] NCCL INFO NCCL_SOCKET_IFNAME set to enp39s0
+al-gpu-02:116857:116857 [0] NCCL INFO NCCL version 2.27.7+cuda12.9
+al-gpu-02:116857:116865 [0] NCCL INFO NET/Plugin: Could not find: libnccl-net.so. 
+al-gpu-02:116857:116865 [0] NCCL INFO NET/Socket : Using [0]enp39s0:10.20.2.102<0>
+al-gpu-02:116857:116865 [0] NCCL INFO Initialized NET plugin Socket
+al-gpu-02:116857:116865 [0] NCCL INFO Could not get speed from /sys/class/net/enp39s0/speed. Defaulting to 10 Gbps.
+al-gpu-02:116857:116865 [0] NCCL INFO Assigned NET plugin Socket to comm
+al-gpu-02:116857:116865 [0] NCCL INFO Using network Socket
+al-gpu-01:115655:115662 [0] NCCL INFO NET/Plugin: Could not find: libnccl-net.so. 
+al-gpu-01:115655:115662 [0] NCCL INFO NET/Socket : Using [0]enp39s0:10.20.2.101<0>
+al-gpu-01:115655:115662 [0] NCCL INFO Initialized NET plugin Socket
+al-gpu-01:115655:115662 [0] NCCL INFO Could not get speed from /sys/class/net/enp39s0/speed. Defaulting to 10 Gbps.
+al-gpu-01:115655:115662 [0] NCCL INFO Assigned NET plugin Socket to comm
+al-gpu-01:115655:115662 [0] NCCL INFO Using network Socket
+al-gpu-02:116857:116865 [0] NCCL INFO ncclCommInitRankConfig comm 0x603e69cbc210 rank 1 nranks 2 cudaDev 0 nvmlDev 0 busId 31000 commId 0x9c58adc3d0861635 - Init START
+al-gpu-01:115655:115662 [0] NCCL INFO ncclCommInitRankConfig comm 0x56dd5f190090 rank 0 nranks 2 cudaDev 0 nvmlDev 0 busId 31000 commId 0x9c58adc3d0861635 - Init START
+al-gpu-01:115655:115662 [0] NCCL INFO RAS client listening socket at 127.0.0.1<28028>
+al-gpu-02:116857:116865 [0] NCCL INFO RAS client listening socket at 127.0.0.1<28028>
+al-gpu-01:115655:115662 [0] NCCL INFO Could not get speed from /sys/class/net/enp39s0/speed. Defaulting to 10 Gbps.
+al-gpu-02:116857:116865 [0] NCCL INFO Could not get speed from /sys/class/net/enp39s0/speed. Defaulting to 10 Gbps.
+al-gpu-01:115655:115662 [0] NCCL INFO NET/Socket : GPU Direct RDMA Disabled for HCA 0 'enp39s0'
+al-gpu-02:116857:116865 [0] NCCL INFO NET/Socket : GPU Direct RDMA Disabled for HCA 0 'enp39s0'
+al-gpu-01:115655:115662 [0] NCCL INFO Setting affinity for GPU 0 to 0-3
+al-gpu-02:116857:116865 [0] NCCL INFO Setting affinity for GPU 0 to 0-3
+al-gpu-01:115655:115662 [0] NCCL INFO comm 0x56dd5f190090 rank 0 nRanks 2 nNodes 2 localRanks 1 localRank 0 MNNVL 0
+al-gpu-01:115655:115662 [0] NCCL INFO Channel 00/02 : 0 1
+al-gpu-02:116857:116865 [0] NCCL INFO comm 0x603e69cbc210 rank 1 nRanks 2 nNodes 2 localRanks 1 localRank 0 MNNVL 0
+al-gpu-01:115655:115662 [0] NCCL INFO Channel 01/02 : 0 1
+al-gpu-01:115655:115662 [0] NCCL INFO Trees [0] 1/-1/-1->0->-1 [1] -1/-1/-1->0->1
+al-gpu-01:115655:115662 [0] NCCL INFO P2P Chunksize set to 131072
+al-gpu-02:116857:116865 [0] NCCL INFO Trees [0] -1/-1/-1->1->0 [1] 0/-1/-1->1->-1
+al-gpu-02:116857:116865 [0] NCCL INFO P2P Chunksize set to 131072
+al-gpu-01:115655:115662 [0] NCCL INFO PROFILER/Plugin: Could not find: libnccl-profiler.so. 
+al-gpu-01:115655:115662 [0] NCCL INFO Check P2P Type isAllDirectP2p 0 directMode 0
+al-gpu-02:116857:116865 [0] NCCL INFO PROFILER/Plugin: Could not find: libnccl-profiler.so. 
+al-gpu-01:115655:115664 [0] NCCL INFO [Proxy Service] Device 0 CPU core 3
+al-gpu-02:116857:116867 [0] NCCL INFO [Proxy Service] Device 0 CPU core 3
+al-gpu-02:116857:116868 [0] NCCL INFO [Proxy Service UDS] Device 0 CPU core 2
+al-gpu-01:115655:115665 [0] NCCL INFO [Proxy Service UDS] Device 0 CPU core 0
+al-gpu-02:116857:116865 [0] NCCL INFO threadThresholds 8/8/64 | 16/8/64 | 512 | 512
+al-gpu-02:116857:116865 [0] NCCL INFO 2 coll channels, 2 collnet channels, 0 nvls channels, 2 p2p channels, 2 p2p channels per peer
+al-gpu-01:115655:115662 [0] NCCL INFO threadThresholds 8/8/64 | 16/8/64 | 512 | 512
+al-gpu-01:115655:115662 [0] NCCL INFO 2 coll channels, 2 collnet channels, 0 nvls channels, 2 p2p channels, 2 p2p channels per peer
+al-gpu-01:115655:115662 [0] NCCL INFO CC Off, workFifoBytes 1048576
+al-gpu-02:116857:116865 [0] NCCL INFO TUNER/Plugin: Could not find: libnccl-tuner.so. Using internal tuner plugin.
+al-gpu-02:116857:116865 [0] NCCL INFO ncclCommInitRankConfig comm 0x603e69cbc210 rank 1 nranks 2 cudaDev 0 nvmlDev 0 busId 31000 commId 0x9c58adc3d0861635 - Init COMPLETE
+al-gpu-02:116857:116865 [0] NCCL INFO Init timings - ncclCommInitRankConfig: rank 1 nranks 2 total 0.17 (kernels 0.14, alloc 0.02, bootstrap 0.01, allgathers 0.00, topo 0.00, graphs 0.00, connections 0.00, rest 0.00)
+al-gpu-01:115655:115662 [0] NCCL INFO TUNER/Plugin: Could not find: libnccl-tuner.so. Using internal tuner plugin.
+al-gpu-01:115655:115662 [0] NCCL INFO ncclCommInitRankConfig comm 0x56dd5f190090 rank 0 nranks 2 cudaDev 0 nvmlDev 0 busId 31000 commId 0x9c58adc3d0861635 - Init COMPLETE
+al-gpu-01:115655:115662 [0] NCCL INFO Init timings - ncclCommInitRankConfig: rank 0 nranks 2 total 0.17 (kernels 0.14, alloc 0.02, bootstrap 0.01, allgathers 0.00, topo 0.00, graphs 0.00, connections 0.00, rest 0.00)
+#
+#                                                              out-of-place                       in-place          
+#       size         count      type   redop    root     time   algbw   busbw #wrong     time   algbw   busbw #wrong
+#        (B)    (elements)                               (us)  (GB/s)  (GB/s)            (us)  (GB/s)  (GB/s)       
+al-gpu-02:116857:116867 [0] NCCL INFO New proxy recv connection 0 from local rank 0, transport 2
+al-gpu-02:116857:116870 [0] NCCL INFO [Proxy Progress] Device 0 CPU core 1
+al-gpu-02:116857:116869 [0] NCCL INFO Connected to proxy localRank 0 -> connection 0x723fa8000d20
+al-gpu-02:116857:116867 [0] NCCL INFO Could not get speed from /sys/class/net/enp39s0/speed. Defaulting to 10 Gbps.
+al-gpu-02:116857:116867 [0] NCCL INFO NET/Socket: Using 4 threads and 4 sockets per thread
+al-gpu-02:116857:116869 [0] NCCL INFO Channel 00/1 : 0[0] -> 1[0] [receive] via NET/Socket/0/Shared
+al-gpu-02:116857:116867 [0] NCCL INFO New proxy recv connection 1 from local rank 0, transport 2
+al-gpu-02:116857:116869 [0] NCCL INFO Connected to proxy localRank 0 -> connection 0x723fa8000d98
+al-gpu-02:116857:116867 [0] NCCL INFO Could not get speed from /sys/class/net/enp39s0/speed. Defaulting to 10 Gbps.
+al-gpu-02:116857:116867 [0] NCCL INFO NET/Socket: Using 4 threads and 4 sockets per thread
+al-gpu-02:116857:116869 [0] NCCL INFO Channel 01/1 : 0[0] -> 1[0] [receive] via NET/Socket/0/Shared
+al-gpu-02:116857:116867 [0] NCCL INFO New proxy send connection 2 from local rank 0, transport 2
+al-gpu-02:116857:116869 [0] NCCL INFO Connected to proxy localRank 0 -> connection 0x723fa8000e10
+al-gpu-02:116857:116867 [0] NCCL INFO Could not get speed from /sys/class/net/enp39s0/speed. Defaulting to 10 Gbps.
+al-gpu-02:116857:116869 [0] NCCL INFO Channel 00/1 : 1[0] -> 0[0] [send] via NET/Socket/0/Shared
+al-gpu-02:116857:116867 [0] NCCL INFO New proxy send connection 3 from local rank 0, transport 2
+al-gpu-02:116857:116869 [0] NCCL INFO Connected to proxy localRank 0 -> connection 0x723fa8000e88
+al-gpu-01:115655:115664 [0] NCCL INFO New proxy recv connection 0 from local rank 0, transport 2
+al-gpu-02:116857:116867 [0] NCCL INFO Could not get speed from /sys/class/net/enp39s0/speed. Defaulting to 10 Gbps.
+al-gpu-02:116857:116869 [0] NCCL INFO Channel 01/1 : 1[0] -> 0[0] [send] via NET/Socket/0/Shared
+al-gpu-01:115655:115667 [0] NCCL INFO [Proxy Progress] Device 0 CPU core 1
+al-gpu-01:115655:115666 [0] NCCL INFO Connected to proxy localRank 0 -> connection 0x7f3538000d20
+al-gpu-01:115655:115664 [0] NCCL INFO Could not get speed from /sys/class/net/enp39s0/speed. Defaulting to 10 Gbps.
+al-gpu-01:115655:115664 [0] NCCL INFO NET/Socket: Using 4 threads and 4 sockets per thread
+al-gpu-01:115655:115666 [0] NCCL INFO Channel 00/1 : 1[0] -> 0[0] [receive] via NET/Socket/0/Shared
+al-gpu-01:115655:115664 [0] NCCL INFO New proxy recv connection 1 from local rank 0, transport 2
+al-gpu-01:115655:115666 [0] NCCL INFO Connected to proxy localRank 0 -> connection 0x7f3538000d98
+al-gpu-01:115655:115664 [0] NCCL INFO Could not get speed from /sys/class/net/enp39s0/speed. Defaulting to 10 Gbps.
+al-gpu-01:115655:115664 [0] NCCL INFO NET/Socket: Using 4 threads and 4 sockets per thread
+al-gpu-01:115655:115666 [0] NCCL INFO Channel 01/1 : 1[0] -> 0[0] [receive] via NET/Socket/0/Shared
+al-gpu-01:115655:115664 [0] NCCL INFO New proxy send connection 2 from local rank 0, transport 2
+al-gpu-01:115655:115666 [0] NCCL INFO Connected to proxy localRank 0 -> connection 0x7f3538000e10
+al-gpu-01:115655:115664 [0] NCCL INFO Could not get speed from /sys/class/net/enp39s0/speed. Defaulting to 10 Gbps.
+al-gpu-01:115655:115666 [0] NCCL INFO Channel 00/1 : 0[0] -> 1[0] [send] via NET/Socket/0/Shared
+al-gpu-01:115655:115664 [0] NCCL INFO New proxy send connection 3 from local rank 0, transport 2
+al-gpu-01:115655:115666 [0] NCCL INFO Connected to proxy localRank 0 -> connection 0x7f3538000e88
+al-gpu-01:115655:115664 [0] NCCL INFO Could not get speed from /sys/class/net/enp39s0/speed. Defaulting to 10 Gbps.
+al-gpu-01:115655:115666 [0] NCCL INFO Channel 01/1 : 0[0] -> 1[0] [send] via NET/Socket/0/Shared
+           8             2     float     sum      -1    70.10    0.00    0.00      0    67.92    0.00    0.00    N/A
+          16             4     float     sum      -1    69.45    0.00    0.00      0    70.63    0.00    0.00    N/A
+          32             8     float     sum      -1    68.30    0.00    0.00      0    67.61    0.00    0.00    N/A
+          64            16     float     sum      -1    66.28    0.00    0.00      0    68.68    0.00    0.00    N/A
+         128            32     float     sum      -1    72.64    0.00    0.00      0    67.11    0.00    0.00    N/A
+         256            64     float     sum      -1    117.9    0.00    0.00      0    119.8    0.00    0.00    N/A
+         512           128     float     sum      -1    113.1    0.00    0.00      0    118.5    0.00    0.00    N/A
+        1024           256     float     sum      -1    117.9    0.01    0.01      0    115.6    0.01    0.01    N/A
+        2048           512     float     sum      -1    116.4    0.02    0.02      0    109.7    0.02    0.02    N/A
+        4096          1024     float     sum      -1    112.7    0.04    0.04      0    113.0    0.04    0.04    N/A
+        8192          2048     float     sum      -1    117.0    0.07    0.07      0    121.7    0.07    0.07    N/A
+       16384          4096     float     sum      -1    136.3    0.12    0.12      0    134.6    0.12    0.12    N/A
+       32768          8192     float     sum      -1    142.7    0.23    0.23      0    148.6    0.22    0.22    N/A
+       65536         16384     float     sum      -1    221.0    0.30    0.30      0    228.3    0.29    0.29    N/A
+      131072         32768     float     sum      -1    329.5    0.40    0.40      0    297.0    0.44    0.44    N/A
+      262144         65536     float     sum      -1    424.0    0.62    0.62      0    449.8    0.58    0.58    N/A
+      524288        131072     float     sum      -1    763.1    0.69    0.69      0    868.3    0.60    0.60    N/A
+     1048576        262144     float     sum      -1   1384.8    0.76    0.76      0   1365.0    0.77    0.77    N/A
+     2097152        524288     float     sum      -1   3952.4    0.53    0.53      0   6295.3    0.33    0.33    N/A
+     4194304       1048576     float     sum      -1    13381    0.31    0.31      0    13285    0.32    0.32    N/A
+     8388608       2097152     float     sum      -1    27148    0.31    0.31      0    27062    0.31    0.31    N/A
+    16777216       4194304     float     sum      -1    54234    0.31    0.31      0    54333    0.31    0.31    N/A
+    33554432       8388608     float     sum      -1   108506    0.31    0.31      0   108855    0.31    0.31    N/A
+    67108864      16777216     float     sum      -1   216092    0.31    0.31      0   216192    0.31    0.31    N/A
+   134217728      33554432     float     sum      -1   432311    0.31    0.31      0   432890    0.31    0.31    N/A
+   268435456      67108864     float     sum      -1   866465    0.31    0.31      0   866307    0.31    0.31    N/A
+   536870912     134217728     float     sum      -1  1732517    0.31    0.31      0  1733231    0.31    0.31    N/A
+  1073741824     268435456     float     sum      -1  3467805    0.31    0.31      0  3468281    0.31    0.31    N/A
+  2147483648     536870912     float     sum      -1  6936990    0.31    0.31      0  6937470    0.31    0.31    N/A
+  4294967296    1073741824     float     sum      -1  13874997    0.31    0.31      0  13874768    0.31    0.31    N/A
+al-gpu-02:116857:124851 [0] NCCL INFO comm 0x603e69cbc210 rank 1 nranks 2 cudaDev 0 busId 31000 - Destroy COMPLETE
+al-gpu-01:115655:123624 [0] NCCL INFO comm 0x56dd5f190090 rank 0 nranks 2 cudaDev 0 busId 31000 - Destroy COMPLETE
+# Out of bounds values : 0 OK
+# Avg bus bandwidth    : 0.23503 
+#
+# Collective test concluded: sendrecv_perf
+

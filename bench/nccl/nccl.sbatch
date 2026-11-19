@@ -10,6 +10,7 @@
 #SBATCH --ntasks-per-node=1
 #SBATCH --gpus-per-node=1
 #SBATCH --exclusive
+# A default for manual runs; run-all.sh passes --time (JOB_MIN).
 #SBATCH --time=00:30:00
 #SBATCH --output=/scratch/logs/nccl-%j.log
 set -euo pipefail

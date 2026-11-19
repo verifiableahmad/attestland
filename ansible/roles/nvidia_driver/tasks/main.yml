@@ -30,6 +30,14 @@
     name: gcc-12
   when: drv.rc != 0 or (drv.stdout_lines | first | default('')) != nvidia_driver_version
 
+# DKMS builds the module against the running kernel; install_recommends is off
+# below, so its headers (not always on a cloud image, e.g. Nebius' driverless
+# 24.04) are named here.
+- name: Headers of the running kernel
+  ansible.builtin.apt:
+    name: "linux-headers-{{ ansible_kernel }}"
+  when: drv.rc != 0 or (drv.stdout_lines | first | default('')) != nvidia_driver_version
+
 # No fabric manager: it is only for NVSwitch systems, and every pool is single-GPU (L4, H100 NVL).
 - name: Install pinned open-kernel driver
   ansible.builtin.apt:

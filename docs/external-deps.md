@@ -1,26 +1,26 @@
 # External dependencies and assumptions
 
-Snapshot of 2026-11-10.
+Snapshot of 2026-11-10. Dependency rows 3, 5, 6, 11 and 12 and assumption row 4 were updated on 2026-11-18 from the AWS pool of that day.
 
 ## External dependencies
 
-22 external dependencies stand between the repo and measured results: 2 are fully in place, 13 are partly in place and 7 are missing. The twin's SKU access (row 20) and MAA carrying our nonce (row 2) decide the rest of Phase 5. Rows 5, 6 and 20 need your accounts, so they can't be done from here.
+22 external dependencies stand between the repo and measured results: 2 are fully in place, 14 are partly in place and 6 are missing. The twin's SKU access (row 20) and MAA carrying our nonce (row 2) decide the rest of Phase 5. Rows 5, 6 and 20 need your accounts, so they can't be done from here.
 
 | # | Dependency | Needed for | Status | Already there | Missing / action |
 | --- | --- | --- | --- | --- | --- |
 | 1 | Azure quota for `Standard_NCC40ads_H100_v5` (`StandardNCCads2023Family` ≥ 40 vCPUs) in eastus2 | Phase 5: confidential H100 | In place | Granted 2026-11-10 (support request 2611100050001296): 40 vCPUs, regional vCPUs 88; `infra/cc-pool` (validated) | - |
 | 2 | Microsoft Azure Attestation token for the SEV-SNP CVM, carrying our nonce, from Azure's guest `AttestationClient` | Phase 5: CPU attestation | Partly in place | MAA collector (the sample app's `-a -n -o token` flags), verifier and policy, tested on the test platform; bring-up builds the client from source and checks the nonce is in the token | Confirm the client's build steps and flags on the CVM image, and the claim names (`x-ms-runtime.client-payload.nonce`, launch measurement) on the first token |
-| 3 | AWS on-demand G and VT vCPU quota in us-east-1, and g6.2xlarge capacity | Phases 2–4 | In place | 384 vCPUs on-demand (2026-11-10); a test g6.2xlarge ran in us-east-1a; `infra/gpu-pool` (validated) | Spot quota is 0 (optional request); us-east-1b had no capacity that day, so set `az` per run |
+| 3 | AWS on-demand G and VT vCPU quota in us-east-1, and g6.2xlarge capacity | Phases 2 to 4 | Partly in place | 384 vCPUs on-demand on 2026-11-10, then 8 since 2026-11-15 (ADR 013). 8 vCPUs fit 2 x g6.xlarge, the pool used on 2026-11-17 and 2026-11-18 | Request 32 vCPUs for 4 x g6.2xlarge. Spot quota is 0 (optional request). Capacity varies by zone, so set `az` per run |
 | 4 | x86 Linux host with KVM and Docker | 1.1 provisioning sim; SONiC lab; L3 VNIs | Partly in place | Scripts, CI job `lab` on an Ubuntu runner, and `infra/lab-host` (AWS c5.metal, ADR 011) | Standard on-demand vCPU quota ≥ 96 in us-east-1; a first `make lab-host-up`. This Mac is arm64 (no docker-sonic-vs build) and its Docker kernel lacks VRF |
-| 5 | GitHub repository with Actions and GHCR | 7.4 signed images; CI; reaper | Partly in place | `.github/workflows` (images, ci, reaper) | Create the remote and push; replace `REPLACE-OWNER` in the policy and Dockerfile |
-| 6 | Cloud credentials for GitHub Actions (AWS OIDC role, Azure federated identity) | 8-hour reaper | Partly in place | `infra/reaper/reap.sh` (AWS and Azure passes), workflow; `infra/reaper/*.tf` creates both identities and the repo variables | `make reaper-up` (runbook); push the AWS/Azure workflow to `main`, which still runs the GCP pass |
+| 5 | GitHub repository with Actions and GHCR | 7.4 signed images; CI; reaper | Partly in place | Public repository on GitHub, default branch `main`; `.github/workflows` (images, ci, reaper) | Replace `REPLACE-OWNER` in `receipts/policy/prod/policy.yaml` and `images/vllm-receipts/Dockerfile` |
+| 6 | Cloud credentials for GitHub Actions (AWS OIDC role, Azure federated identity) | 8-hour reaper | Partly in place | `make reaper-up` is applied: the AWS role, the Entra app and the repo variables exist. The workflow on `main` runs the AWS and Azure passes, and every run so far succeeded | The hourly schedule fires only every 4 to 9 hours, and none of the 12 runs checked on 2026-11-18 terminated an instance. Test with `gh workflow run reaper -f dry_run=1` while a pool is older than 8 hours |
 | 7 | Sigstore public good (Fulcio, Rekor) and a pinned `trusted_root.json` | Image check in `alverify` | Partly in place | sigstore-go verification, tested with a virtual Sigstore | Run `cosign trusted-root create` (or TUF fetch) into `receipts/policy/prod/` |
 | 8 | MAA instance and its pinned JWKS | CPU attestation | Partly in place | MAA token verifier; `maa_url` defaults to the shared eastus2 instance | Pin `<maa_url>/certs` in `receipts/policy/prod/` |
 | 9 | NVIDIA NRAS and its JWKS; NVAT (`nvattest`) install | GPU attestation | Partly in place | NRAS EAT verifier; NVAT collector | Confirm NVAT package, CLI flags and JSON fields on Azure; pin NRAS JWKS; record VBIOS |
 | 10 | CC-capable NVIDIA driver and `nvidia-smi conf-compute` flags | 7.2 bring-up | Partly in place | Azure SEV-SNP bring-up script with checks | Confirm package names and flags for the pinned driver branch on the NCC H100 v5 image |
-| 11 | S3 buckets and the nodes' instance role | Durable tier (5.1) | Partly in place | `infra/durable` (`make durable-up`; access in `infra/gpu-pool/storage.tf`); checkpoint code tested against an S3 API server | `tofu apply`; confirm the vLLM init container reaches the role through IMDS (hop limit 2) |
-| 12 | Training dataset (FineWeb-Edu sample-10BT, ODC-By 1.0) and GPT-2 tokenizer | 4.1 training data | Missing | `prepare.py` (tokenise, shard, hash, upload) | Download \~2B tokens; confirm the licence fits your use |
-| 13 | Open 7–8B model for serving numbers | 4.2 realistic serving | Missing | vLLM manifest takes any model prefix | Pick and upload weights (assumed Qwen2.5-7B-Instruct, Apache 2.0, not gated) |
+| 11 | S3 buckets and the nodes' instance role | Durable tier (5.1) | In place | `infra/durable` (`make durable-up`) holds the four buckets; access in `infra/gpu-pool/storage.tf`. The role works from the nodes and from pods: on 2026-11-18 the vLLM init container listed the models bucket through IMDS | - |
+| 12 | Training dataset (FineWeb-Edu sample-10BT, ODC-By 1.0) and GPT-2 tokenizer | 4.1 training data | Partly in place | 2B tokens prepared by `prepare.py` in `s3://<prefix>-datasets/fineweb-edu-2b` (21 files); `make data` copies them to the nodes | Confirm the licence fits your use |
+| 13 | Open 7 to 8B model for serving numbers | 4.2 realistic serving | Missing | vLLM manifest takes any model prefix | Pick and upload weights (assumed Qwen2.5-7B-Instruct, Apache 2.0, not gated) |
 | 14 | Incident destination (Alertmanager webhook, or GitHub token + repo) | healthd incidents, alerts | Missing | Alertmanager and GitHub-issue sinks, tested | `AL_ALERT_WEBHOOK_URL`, or `GITHUB_TOKEN` + repo |
 | 15 | Cluster secrets (munge key, Slurm JWT key, the Grafana password) | `make up POOL=gpu` | Partly in place | Ansible reads them from env | Generate and export before `make up` (runbook, Phase 2) |
 | 16 | SSH key pair and admin CIDR | All VMs | Partly in place | Variables in every pool | Your key path and IP in `terraform.tfvars` |
@@ -33,17 +33,17 @@ Snapshot of 2026-11-10.
 
 ## Assumptions
 
-I made 28 assumptions where the spec left a choice open or a vendor detail could not be checked from here. The riskiest are rows 13–16 and 22, attestation tool flags and claim names that only a real confidential VM can confirm, and row 23, Kueue's topology API in the pinned version.
+I made 29 assumptions where the spec left a choice open or a vendor detail could not be checked from here. The riskiest are rows 13 to 16 and 22, attestation tool flags and claim names that only a real confidential VM can confirm, and row 23, Kueue's topology API in the pinned version.
 
 | # | Area | Assumption | Where | How to confirm |
 | --- | --- | --- | --- | --- |
-| 1 | Clouds | GPU pool on AWS `g6.2xlarge` in us-east-1, one zone per run; confidential pool on Azure `Standard_NCC40ads_H100_v5` in eastus2 zone 1 (ADR 010) | `infra/*/variables.tf` | Quota and capacity at apply time |
+| 1 | Clouds | GPU pool on AWS `g6.2xlarge` in us-east-1, one zone per run; confidential pool on Azure `Standard_NCC40ads_H100_v5` in eastus2 zone 1 (ADR 010); alternative GPU pool on Nebius, 2 x `gpu-l40s-a`/`1gpu-8vcpu-32gb` in eu-north1, Ubuntu 24.04 (ADR 013) | `infra/*/variables.tf` | Quota and capacity at apply time |
 | 2 | Versions | Every pin in `versions.env` was chosen on 2026-11-07, partly from memory; not all were checked upstream | `versions.env` | Re-check each pin before spending (spec ground rule) |
 | 3 | Dataset | FineWeb-Edu sample-10BT (ODC-By 1.0), 2B tokens prepared, GPT-2 tokenizer | `workloads/train/prepare.py` | Licence review |
-| 4 | Token budget | 800M tokens ≈ 1.5 h on 4 × L4 at \~20% MFU | `configs/gpt124m.yaml` | Re-size after the 1-GPU baseline |
+| 4 | Token budget | 800M tokens ≈ 1.5 h on 4 × L4 at \~20% MFU | `configs/gpt124m.yaml` | Re-size after the 1-GPU baseline. Measured on 2026-11-18: about 36,500 tokens/s on one L4 at 22% MFU, so 1.5 h on 4 GPUs holds only if 4 GPUs scale perfectly |
 | 5 | MFU peak | L4 dense bf16 = 121 TFLOPS (242 with sparsity) | `configs/gpt124m.yaml` | NVIDIA L4 datasheet |
-| 6 | Serving model | Qwen2.5-7B-Instruct (Apache 2.0, not gated) for the 7–8B serving numbers | Not yet in config; set MODEL\_PREFIX in the vLLM ConfigMap | Your choice of model |
-| 7 | Pools | GPU nodes 1–3 start in Slurm and node 4 in Kubernetes; Slurm features are `pool_slurm` / `pool_k8s` because Slurm feature names cannot contain "=" | `ansible/group_vars/gpu.yml`, `pool-move.sh` | - |
+| 6 | Serving model | Qwen2.5-7B-Instruct (Apache 2.0, not gated) for the 7 to 8B serving numbers | Not yet in config; set MODEL\_PREFIX in the vLLM ConfigMap | Your choice of model |
+| 7 | Pools | GPU nodes 1 to 3 start in Slurm and node 4 in Kubernetes; Slurm features are `pool_slurm` / `pool_k8s` because Slurm feature names cannot contain "=" | `ansible/group_vars/gpu.yml`, `pool-move.sh` | - |
 | 8 | Drain budget | "1 node or 25%" read as max(1, 25% of fleet) distinct nodes per rolling hour; raised to 8 for the goodput experiment | `healthd` options, `chaos/experiment.yaml` | Your reading of the spec |
 | 9 | Burn-in baselines | Placeholders taken from public specs until the Phase 2 medians exist | `fleet/burnin/baselines.yaml` (status: placeholder) | Replace with measured medians |
 | 10 | Checkpoints | `sync_durable` = local write + blocking upload to S3; FSDP uses `direct_durable` saves; restart time R = 180 s until measured | `ckpt.py`, `storage/interval.py` | Phase 4 measurements |
@@ -65,3 +65,4 @@ I made 28 assumptions where the spec left a choice open or a vendor detail could
 | 26 | Slurm topology | `topology/tree`, one switch per sub-block and per block; configless slurmd receives `topology.conf` from slurmctld | `sched/slurm/slurm.conf.j2`, role `topology` | `scontrol show topology` on the pool |
 | 27 | S3 from pods | The vLLM init container gets the node role's credentials through IMDSv2 (hop limit 2) | `infra/gpu-pool`, `sched/k8s/vllm/vllm.yaml` | First weight sync on the k8s node |
 | 28 | Operating system | Ubuntu 22.04 on every VM: Canonical's jammy AMIs on AWS, the `22_04-lts-cvm` confidential image on Azure (ADR 009) | `infra/*`, `versions.env` | `az vm image list --publisher Canonical --offer 0001-com-ubuntu-confidential-vm-jammy --all` |
+| 29 | Nebius first apply | `cpu-d3`/`4vcpu-16gb` exists; bucket `name` is the S3 name; security rules allow the intra-group and admin traffic; `ubuntu24.04-driverless` boots on `gpu-l40s-a`; the pinned driver, NCCL, CUDA, DCGM and container-toolkit versions exist in the `ubuntu2404` NVIDIA repository; the Nebius quotas (3 VMs, 3 disks, 4 vCPUs) | `infra/gpu-pool-nebius`, `infra/durable-nebius`, `versions.env` | `make durable-nebius-up`, then `make up POOL=gpu CLOUD=nebius` |

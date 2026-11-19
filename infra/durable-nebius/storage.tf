@@ -12,6 +12,8 @@ resource "nebius_storage_v1_bucket" "durable" {
   parent_id         = var.project_id
   name              = "${local.bucket_prefix}-${each.key}"
   versioning_policy = "ENABLED"
+  # Never deleted by OpenTofu: empty and remove a bucket by hand.
+  lifecycle { prevent_destroy = true }
   # Versioning keeps every overwritten checkpoint; do not let old versions pile up.
   lifecycle_configuration = {
     rules = [{

@@ -11,6 +11,36 @@
     sysctl_file: /etc/sysctl.d/91-k8s.conf
   loop: [net.bridge.bridge-nf-call-iptables, net.bridge.bridge-nf-call-ip6tables, net.ipv4.ip_forward]
 
+# Ubuntu's podman puts its bridge network in /etc/cni/net.d, kubelet's CNI
+# directory. Pods that start before Calico writes its config (CoreDNS on the
+# control node) then land on that host-only bridge, and pods on other nodes cannot
+# reach them: DNS from the GPU nodes times out (I-16, "Could not connect to the
+# endpoint URL"). podman keeps its networks in a directory of its own.
+- name: podman's CNI directory
+  ansible.builtin.file:
+    path: /etc/containers/cni.d
+    state: directory
+    mode: "0755"
+
+- name: podman reads its networks from there
+  community.general.ini_file:
+    path: /etc/containers/containers.conf
+    section: network
+    option: network_config_dir
+    value: '"/etc/containers/cni.d"'
+    mode: "0644"
+
+- name: podman's bridge out of kubelet's CNI directory
+  ansible.builtin.shell: |
+    shopt -s nullglob
+    moved=0
+    for f in /etc/cni/net.d/*podman*.conflist; do mv "$f" /etc/containers/cni.d/; moved=1; done
+    echo "moved=$moved"
+  args:
+    executable: /bin/bash
+  register: al_podman_cni
+  changed_when: "'moved=1' in al_podman_cni.stdout"
+
 - name: Swap off
   ansible.builtin.command: swapoff -a
   changed_when: false

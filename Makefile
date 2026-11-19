@@ -3,6 +3,7 @@
 #   make durable-up              S3 buckets and the OpenTofu state bucket (AWS, once; outlives every pool)
 #   make up POOL=gpu|cc          create a pool (OpenTofu) and configure it (Ansible);
 #                                POOL=gpu CLOUD=nebius: the GPU pool on Nebius (ADR 013)
+#   make durable-nebius-up       Nebius buckets and S3 key (once; outlives every Nebius pool; state in the AWS state bucket)
 #   make sync                    copy this working tree to the control node (after a local edit)
 #   make results-pull            result files and job logs from the control node to bench/results
 #   make down POOL=gpu|cc        pull the results, then destroy the pool; ends every working session
@@ -37,7 +38,7 @@ ifeq ($(wildcard /etc/fleet/node.env),)
 AWS_PROFILE ?= attestland
 endif
 
-.PHONY: help up down infra-up infra-down configure sync results-pull control-ssh durable-up state-migrate \
+.PHONY: help up down infra-up infra-down configure sync results-pull control-ssh durable-up durable-nebius-up state-migrate \
         reaper-up reaper-down \
         lab-host-up lab-host-sync lab-host-ssh lab-host-down \
         lab-image lab-up lab-test lab-down lab-rail-up provision provision-down \
@@ -54,13 +55,28 @@ up: infra-up configure
 # in their own state, so `make down` never touches them.
 # Interactive on purpose: review the plan (imports, no destroys) and type yes.
 durable-up:
+	@[ -f infra/durable/terraform.tfvars ] || { echo "cp infra/durable/terraform.tfvars.example infra/durable/terraform.tfvars first:" \
+	  "it lists the buckets to adopt (import_buckets) instead of create" >&2; exit 1; }
 	$(TOFU) -chdir=infra/durable init -input=false
 	$(TOFU) -chdir=infra/durable apply
 
-# The AWS GPU pool keeps its state in the durable tier's bucket (OPS-2).
+# The GPU pools keep their state in the AWS durable tier's bucket (OPS-2), the
+# Nebius pool and the Nebius durable tier under keys of their own: nothing else of
+# AWS is needed to run, or destroy, a Nebius pool.
 AWS_GPU := $(and $(filter gpu,$(POOL)),$(filter aws,$(CLOUD)))
-BACKEND_CONFIG = $(if $(AWS_GPU),-backend-config=bucket=$$($(TOFU) -chdir=infra/durable output -raw state_bucket) \
-                 -backend-config=region=$$($(TOFU) -chdir=infra/durable output -raw region))
+NEBIUS_GPU := $(and $(filter gpu,$(POOL)),$(filter nebius,$(CLOUD)))
+STATE_BACKEND = -backend-config=bucket=$$($(TOFU) -chdir=infra/durable output -raw state_bucket) \
+                -backend-config=region=$$($(TOFU) -chdir=infra/durable output -raw region)
+BACKEND_CONFIG = $(if $(or $(AWS_GPU),$(NEBIUS_GPU)),$(STATE_BACKEND))
+
+# Nebius buckets and the S3 key, in their own state (infra/durable-nebius).
+# Interactive on purpose, like durable-up.
+durable-nebius-up:
+	@[ -f infra/durable-nebius/terraform.tfvars ] || { echo "cp infra/durable-nebius/terraform.tfvars.example infra/durable-nebius/terraform.tfvars first" >&2; exit 1; }
+	@$(TOFU) -chdir=infra/durable output -raw state_bucket >/dev/null 2>&1 || { \
+	  echo "no state bucket: run make durable-up first (AWS, once; runbook, Phase 2 step 3)" >&2; exit 1; }
+	$(TOFU) -chdir=infra/durable-nebius init -input=false $(STATE_BACKEND)
+	$(TOFU) -chdir=infra/durable-nebius apply
 
 # Once, to move a local terraform.tfstate of infra/gpu-pool into the state bucket.
 state-migrate:
@@ -74,6 +90,12 @@ ifneq ($(AWS_GPU),)
 	  echo "no durable tier yet: run make durable-up first (runbook, Phase 2 step 3)" >&2; exit 1; }
 	@[ ! -s infra/gpu-pool/terraform.tfstate ] || grep -qs '"type": *"s3"' infra/gpu-pool/.terraform/terraform.tfstate || { \
 	  echo "infra/gpu-pool still has a local state: run make state-migrate first (runbook, Phase 2 step 3)" >&2; exit 1; }
+endif
+ifneq ($(NEBIUS_GPU),)
+	@$(TOFU) -chdir=infra/durable output -raw state_bucket >/dev/null 2>&1 || { \
+	  echo "no state bucket: run make durable-up first (AWS, once; runbook, Phase 2 step 3)" >&2; exit 1; }
+	@$(TOFU) -chdir=infra/durable-nebius output -raw bucket_prefix >/dev/null 2>&1 || { \
+	  echo "no Nebius durable tier yet: run make durable-nebius-up first (runbook, Nebius step 4)" >&2; exit 1; }
 endif
 	$(TOFU) -chdir=$(POOL_DIR) init -input=false $(BACKEND_CONFIG)
 	$(if $(AWS_GPU),./scripts/aws-quota.sh $(POOL_DIR))

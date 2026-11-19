@@ -19,7 +19,7 @@ s3_bucket_prefix: "{{ lookup('env', 'AL_BUCKET_PREFIX') | default(bucket_prefix 
 # The key comes from the tofu outputs, never from the inventory (it is tracked).
 s3_endpoint_url: "{{ s3_endpoint | default('') }}"
 # -json, not -raw: with no state, -raw prints a warning and exits 0.
-s3_tofu_outputs: "{{ lookup('pipe', 'tofu -chdir=' ~ playbook_dir ~ '/../infra/gpu-pool-nebius output -json') | from_json if s3_endpoint_url else {} }}"
+s3_tofu_outputs: "{{ lookup('pipe', 'tofu -chdir=' ~ playbook_dir ~ '/../infra/durable-nebius output -json') | from_json if s3_endpoint_url else {} }}"
 s3_access_key: "{{ s3_tofu_outputs['s3_access_key_id']['value'] if s3_endpoint_url else '' }}"
 s3_secret_key: "{{ s3_tofu_outputs['s3_secret_access_key']['value'] if s3_endpoint_url else '' }}"
 

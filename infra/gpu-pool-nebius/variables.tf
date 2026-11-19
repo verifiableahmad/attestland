@@ -3,11 +3,6 @@ variable "project_id" {
   description = "Nebius project (project-...), in the region of the GPU platform."
 }
 
-variable "tenant_id" {
-  type        = string
-  description = "Tenant (tenant-...) that owns the project; its editors group gets the S3 service account."
-}
-
 variable "cli_profile" {
   type    = string
   default = "default"
@@ -16,7 +11,7 @@ variable "cli_profile" {
 variable "region" {
   type        = string
   default     = "eu-north1"
-  description = "The project's region; L40S and H100 are only in eu-north1."
+  description = "The project's region; the L40S platforms are only in eu-north1 (docs.nebius.com/overview/regions)."
 }
 
 variable "admin_cidrs" {
@@ -99,5 +94,5 @@ variable "ssh_public_key_path" {
 variable "bucket_prefix" {
   type        = string
   default     = ""
-  description = "Bucket name prefix; empty means attestland-<project id>."
+  description = "Bucket name prefix; empty means attestland-<project id>, as in infra/durable-nebius."
 }

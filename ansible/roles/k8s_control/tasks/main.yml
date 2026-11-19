@@ -61,6 +61,25 @@
   register: al_calico
   changed_when: "'configured' in al_calico.stdout or 'created' in al_calico.stdout"
 
+# Pods created before Calico was ready (or on a cluster built before podman's
+# bridge was moved) keep a host-only address: recreate those in kube-system.
+- name: kube-system pods on the pod network
+  ansible.builtin.shell: |
+    set -euo pipefail
+    kubectl -n kube-system rollout status ds/calico-node --timeout=10m >/dev/null
+    for d in coredns calico-kube-controllers; do
+      ips=$(kubectl -n kube-system get pods -l "k8s-app=${d/coredns/kube-dns}" -o jsonpath='{.items[*].status.podIP}')
+      if python3 -c 'import ipaddress,sys; n=ipaddress.ip_network(sys.argv[1]); sys.exit(0 if all(ipaddress.ip_address(i) in n for i in sys.argv[2:]) else 1)' \
+          {{ k8s_pod_cidr }} $ips; then continue; fi
+      echo "recreating $d (pod IPs: $ips)"
+      kubectl -n kube-system rollout restart deploy/$d
+      kubectl -n kube-system rollout status deploy/$d --timeout=5m >/dev/null
+    done
+  args:
+    executable: /bin/bash
+  register: al_kube_system_net
+  changed_when: "'recreating' in al_kube_system_net.stdout"
+
 - name: Join command for workers
   ansible.builtin.command: kubeadm token create --print-join-command --ttl 1h
   register: join_cmd

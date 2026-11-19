@@ -5,6 +5,10 @@
 #   logs, runs: mount points for the control node's shares (role shared)
 set -euo pipefail
 for d in {{ scratch_layout | join(' ') }}; do
-  mkdir -p "{{ scratch_mount }}/$d"
-  chmod 1777 "{{ scratch_mount }}/$d"
+  p="{{ scratch_mount }}/$d"
+  # Already a mount (the control node's NFS share, root-squashed): its mode is
+  # set on the control node (role shared). At boot this runs before those mounts.
+  mountpoint -q "$p" && continue
+  mkdir -p "$p"
+  chmod 1777 "$p"
 done

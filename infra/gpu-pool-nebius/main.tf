@@ -1,6 +1,6 @@
 # GPU pool on Nebius (ADR 013): the same layout as infra/gpu-pool (a control VM
 # plus single-GPU nodes), selected with `make up POOL=gpu CLOUD=nebius`. The
-# durable tier is Nebius Object Storage (storage.tf), reached with an S3 key.
+# durable tier is Nebius Object Storage (infra/durable-nebius), reached with an S3 key.
 terraform {
   required_version = ">= 1.8"
   required_providers {
@@ -11,6 +11,13 @@ terraform {
       # 0.x: a minor release may break the schema, so stay on 0.6 (checked with 0.6.85)
       version = "~> 0.6.8"
     }
+  }
+  # State in the AWS state bucket of infra/durable (the only thing here that
+  # needs AWS); the Makefile passes bucket and region. Separate from the AWS
+  # pool's state, so the two pools are applied and destroyed independently.
+  backend "s3" {
+    key          = "gpu-pool-nebius/terraform.tfstate"
+    use_lockfile = true
   }
 }
 
@@ -23,6 +30,8 @@ provider "nebius" {
 # 24.04 (ADR 013). The driverless family: the nvidia_driver role installs the
 # pinned driver, as on AWS.
 locals {
+  # The buckets are in infra/durable-nebius, which derives the same default.
+  bucket_prefix = var.bucket_prefix != "" ? var.bucket_prefix : "attestland-${trimprefix(var.project_id, "project-")}"
   user_data = <<-EOT
     #cloud-config
     users:

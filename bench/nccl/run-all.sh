@@ -8,10 +8,13 @@ cd "$(dirname "$0")/../.."
 REPEATS=${REPEATS:-3}
 NODES=${NODES:-2}
 PARTITION=${PARTITION:-gpu}
+# Each sweep's time limit. A drained g6.xlarge link (2.5 Gbps baseline) made
+# one 4 GiB sweep take 23 min on 2026-11-17, against 7 min on burst credits.
+JOB_MIN=${JOB_MIN:-60}
 # A job that has not started PEND_MIN minutes after submission is cancelled
-# (state DEADLINE) instead of pending forever. 30 = nccl.sbatch's time limit.
+# (state DEADLINE) instead of pending forever.
 PEND_MIN=${PEND_MIN:-15}
-deadline="now+$(( PEND_MIN + 30 ))minutes"
+deadline="now+$(( PEND_MIN + JOB_MIN ))minutes"
 
 avail=$(sinfo -h -p "$PARTITION" -t idle -o %D | awk '{s += $1} END {print s + 0}')
 if (( avail < NODES )); then
@@ -29,7 +32,7 @@ run() {  # run <collective> <transport> <nodes> <gpus per node> <repeat> [parse_
   local coll=$1 transport=$2 n=$3 g=$4 rep=$5 jid; shift 5
   echo "$(date -u +%H:%M:%S) $coll/$transport rep $rep on $n node(s)"
   # --wait: sbatch exits with the job's exit code once it ends.
-  if ! jid=$(sbatch --parsable --wait --deadline="$deadline" -N "$n" --gpus-per-node="$g" \
+  if ! jid=$(sbatch --parsable --wait --time="$JOB_MIN" --deadline="$deadline" -N "$n" --gpus-per-node="$g" \
       bench/nccl/nccl.sbatch "$coll" "$transport"); then
     echo "FAILED $coll/$transport rep $rep: job ${jid:-?} $(sacct -nX -j "${jid:-0}" -o State,ExitCode 2>/dev/null | xargs)" >&2
     fail=1

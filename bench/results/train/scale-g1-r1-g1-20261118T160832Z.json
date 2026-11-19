@@ -1,0 +1,150 @@
+{
+  "config": {
+    "checkpoint": {
+      "durable_uri": "s3://checkpoints",
+      "interval_s": "1e9",
+      "keep_local": 2,
+      "local_dir": "/scratch/ckpt",
+      "mode": "async"
+    },
+    "data": {
+      "dir": "/scratch/data/fineweb-edu-2b",
+      "verify": true
+    },
+    "device": "auto",
+    "dist": {
+      "timeout_s": 180
+    },
+    "hardware": {
+      "peak_bf16_flops": "121.0e12"
+    },
+    "model": {
+      "block_size": 1024,
+      "dropout": 0.0,
+      "n_embd": 768,
+      "n_head": 12,
+      "n_layer": 12,
+      "vocab_size": 50304
+    },
+    "optim": {
+      "grad_clip": 1.0,
+      "lr": 0.0006,
+      "min_lr": 6e-05,
+      "warmup_steps": 200,
+      "weight_decay": 0.1
+    },
+    "run_dir": "/scratch/runs/scale-g1-r1",
+    "run_name": "scale-g1-r1",
+    "seed": 1337,
+    "textfile_dir": "/var/lib/node_exporter/textfile",
+    "train": {
+      "compile": true,
+      "grad_accum": 4,
+      "micro_batch": 8,
+      "token_budget": 60000000,
+      "warmup_steps_excluded": 20
+    }
+  },
+  "created_utc": "2026-11-18T16:08:32.622081Z",
+  "git_sha": "a4b32e013f70510b15f1be936bdf749ce4a48792-dirty",
+  "hardware": {
+    "cloud": "local",
+    "cpu": "x86_64",
+    "gpu_driver": "580.196.07",
+    "gpu_model": "NVIDIA L4",
+    "gpus": [
+      {
+        "driver": "580.196.07",
+        "name": "NVIDIA L4",
+        "vbios": "95.04.65.00.37"
+      }
+    ],
+    "hostname": "al-gpu-01",
+    "instance_type": "unknown",
+    "kernel": "6.8.0-1069-aws",
+    "region": "unknown",
+    "software": {
+      "nccl": "2.27.7-1+cuda13.0"
+    }
+  },
+  "metrics": {
+    "gpus": 1,
+    "mfu": 0.2257023693997292,
+    "n_params": 124475904,
+    "peak_bf16_flops_per_gpu": 121000000000000.0,
+    "step_time_s": {
+      "max": 0.9154244279998238,
+      "median": 0.8961175559998082,
+      "min": 0.7881102659994212,
+      "n": 1811
+    },
+    "steps": 1831,
+    "steps_measured": 1811,
+    "tokens_per_s": 36566.63099680084,
+    "tokens_per_s_per_gpu": 36566.63099680084,
+    "tokens_per_step": 32768
+  },
+  "name": "scale-g1-r1-g1",
+  "notes": "",
+  "phase": "train",
+  "schema_version": 1,
+  "versions": {
+    "ALERTMANAGER_IMAGE": "docker.io/prom/alertmanager:v0.28.1",
+    "ALLOY_IMAGE": "docker.io/grafana/alloy:v1.11.0",
+    "ANSIBLE_CORE_VERSION": "2.19.2",
+    "AWSCLI_IMAGE": "docker.io/amazon/aws-cli:2.27.50",
+    "AWSCLI_SHA256": "2ed5b5a1d92f3aa860034b0d9ec0902574852c3e60916e221414abb6f1504d9e",
+    "AWS_AMI_NAME": "ubuntu/images/hvm-ssd/ubuntu-jammy-22.04-amd64-server-20261109",
+    "BASE_KERNEL_FLAVOR": "generic",
+    "BASE_OS": "ubuntu-22.04",
+    "CALICO_MANIFEST_SHA256": "9382d2b27a76f40c170454b408653e6d71e2205ef0aef069e942bb690e7381d0",
+    "CALICO_VERSION": "v3.30.3",
+    "CONTAINERLAB_SHA256": "675eea8bd4d05ea3abc4a98cfa859975c9886705d6a510fead4dfd8dbed8b793",
+    "CONTAINERLAB_VERSION": "0.77.0",
+    "COSIGN_VERSION": "v2.6.0",
+    "CUDA_VERSION": "12.9.1",
+    "DCGM_EXPORTER_IMAGE": "nvcr.io/nvidia/k8s/dcgm-exporter:4.4.1-4.6.0-ubuntu22.04",
+    "DCGM_VERSION": "4.4.1",
+    "ENROOT_CAPS_SHA256": "6a70b1cada238fe329ee83f50c6df775513d4977f1bc5aea248bb8d327bdc874",
+    "ENROOT_SHA256": "28c3e25d0e29f2a044b121cfa729fdc51601c16707937f72fce3b2e2502f6d36",
+    "ENROOT_VERSION": "3.5.0",
+    "FRR_IMAGE": "quay.io/frrouting/frr:10.4.1",
+    "GO_VERSION": "1.24.0",
+    "GPU_OPERATOR_VERSION": "v25.10.0",
+    "GRAFANA_IMAGE": "docker.io/grafana/grafana:12.2.0",
+    "HELM_SHA256": "a7f81ce08007091b86d8bd696eb4d86b8d0f2e1b9f6c714be62f82f96a594496",
+    "HELM_VERSION": "v3.19.0",
+    "K3D_VERSION": "v5.8.3",
+    "KUBERNETES_VERSION": "1.34.1",
+    "KUEUE_MANIFEST_SHA256": "a28f57a3e9b53f444ccfca7d0b2a23518bc4ca751aed23ebd4780aedd0c6845a",
+    "KUEUE_VERSION": "v0.14.1",
+    "LAB_HOST_IMAGE": "docker.io/nicolaka/netshoot:v0.14",
+    "LOKI_IMAGE": "docker.io/grafana/loki:3.5.5",
+    "NCCL_TESTS_REF": "v2.17.1",
+    "NCCL_VERSION": "2.27.7-1+cuda12.9",
+    "NODE_EXPORTER_SHA256": "becb950ee80daa8ae7331d77966d94a611af79ad0d3307380907e0ec08f5b4e8",
+    "NODE_EXPORTER_VERSION": "1.9.1",
+    "NVAT_VERSION": "1.1.0",
+    "NVIDIA_CONTAINER_TOOLKIT_VERSION": "1.18.0",
+    "NVIDIA_DRIVER_BRANCH": "580",
+    "NVIDIA_DRIVER_FLAVOR": "open",
+    "NVIDIA_DRIVER_PKG_REV": "1ubuntu1",
+    "NVIDIA_DRIVER_VERSION": "580.196.07",
+    "OPENTOFU_VERSION": "1.13.9",
+    "PROMETHEUS_IMAGE": "docker.io/prom/prometheus:v3.6.0",
+    "PYTORCH_IMAGE": "nvcr.io/nvidia/pytorch:25.10-py3",
+    "PYTORCH_VERSION": "2.9.0",
+    "PYXIS_VERSION": "0.21.0",
+    "SLURM_EXPORTER_SHA256": "193d75ebafcce7b5ec95d9c01e73a689e580d741c6182606f7764e9d48361260",
+    "SLURM_EXPORTER_VERSION": "1.6.4",
+    "SLURM_SHA256": "c7c8678f5fede6cdcaa2ad3ff39d7321f1ece9a0b36c433eaef104f55dfa8936",
+    "SLURM_VERSION": "25.05.3",
+    "SONIC_VS_BRANCH": "202511",
+    "SONIC_VS_IMAGE": "docker-sonic-vs:202511",
+    "SONIC_VS_SHA256": "",
+    "SUSHY_TOOLS_VERSION": "2.1.0",
+    "TINKERBELL_STACK_VERSION": "v0.19.2",
+    "VLLM_IMAGE": "docker.io/vllm/vllm-openai:v0.11.0",
+    "VLLM_VERSION": "0.11.0"
+  }
+}

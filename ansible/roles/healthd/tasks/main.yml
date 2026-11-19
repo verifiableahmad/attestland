@@ -12,7 +12,7 @@
       ansible.builtin.shell: |
         set -e
         before=$(podman image inspect --format '{{ '{{' }}.Id{{ '}}' }}' localhost/healthd:local 2>/dev/null || true)
-        podman build -q -t localhost/healthd:local /opt/al/src/healthd >/dev/null
+        podman build -q --network host -t localhost/healthd:local /opt/al/src/healthd >/dev/null
         after=$(podman image inspect --format '{{ '{{' }}.Id{{ '}}' }}' localhost/healthd:local)
         if [ "$before" = "$after" ] && ctr -n k8s.io images ls -q | grep -qx localhost/healthd:local; then echo same; exit 0; fi
         rm -f /tmp/healthd.tar

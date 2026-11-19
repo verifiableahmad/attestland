@@ -14,7 +14,8 @@
     group: false
     delete: true
     rsync_opts:
-      - --filter=P /chaos/log/
+      # "_", not a space: synchronize passes rsync_opts unquoted
+      - --filter=P_/chaos/log/
       - --exclude=.venv
       - --exclude=.terraform
       - --exclude=*.tfstate*

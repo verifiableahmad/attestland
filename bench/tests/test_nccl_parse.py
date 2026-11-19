@@ -61,8 +61,8 @@ def test_hardware_comes_from_the_job_nodes(tmp_path):
 
 
 # Real nccl-tests output (I-19): drop a log pulled with `make results-pull` into
-# fixtures/real/ and it is parsed here too. None yet: the first one comes from the
-# first make nccl on the pool (runbook, Phase 2).
+# fixtures/real/ and it is parsed here too (the first one came from the first
+# make nccl on the pool, runbook Phase 2).
 REAL = sorted((Path(__file__).parent / "fixtures" / "real").glob("*.log"))
 
 
